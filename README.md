@@ -161,8 +161,8 @@ GET /api/v1/reports/conflicts
 ## Setup
 
 ```bash
-git clone <repo>
-cd project
+git clone https://github.com/nav-jk/Medication-Reconciliation-Conflict-Reporting-Service.git
+cd Medication-Reconciliation-Conflict-Reporting-Service
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
