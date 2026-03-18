@@ -7,6 +7,20 @@ from app.utils.normalizer import (
 from app.utils.validator import validate_dosage
 from app.utils.constants import SEVERITY, SOURCE_PRIORITY
 
+from datetime import datetime, timezone
+import uuid
+
+
+# 🔥 Standard conflict structure
+def base_conflict():
+    return {
+        "id": str(uuid.uuid4()),
+        "status": "unresolved",
+        "resolved_at": None,
+        "resolution_reason": None,
+        "detected_at": datetime.now(timezone.utc).isoformat()
+    }
+
 
 def reconcile_medications(sources):
     med_map = {}
@@ -36,6 +50,7 @@ def reconcile_medications(sources):
                 if key not in conflict_set:
                     conflict_set.add(key)
                     conflicts.append({
+                        **base_conflict(),
                         "drug": norm_name,
                         "type": "DUPLICATE_ENTRY",
                         "severity": "LOW",
@@ -55,6 +70,7 @@ def reconcile_medications(sources):
                     if key not in conflict_set:
                         conflict_set.add(key)
                         conflicts.append({
+                            **base_conflict(),
                             "drug": norm_name,
                             "type": "UNCOMMON_DOSAGE",
                             "severity": SEVERITY["UNCOMMON_DOSAGE"],
@@ -80,12 +96,13 @@ def reconcile_medications(sources):
 
             current_priority = SOURCE_PRIORITY.get(med.source, 0)
 
-            # 🔥 INCOMPLETE DATA (NEW FIX)
+            # 🔥 INCOMPLETE DATA
             if (existing["dosage"] is None and norm_dosage) or (existing["dosage"] and norm_dosage is None):
                 key = (norm_name, "INCOMPLETE_DATA", "dosage")
                 if key not in conflict_set:
                     conflict_set.add(key)
                     conflicts.append({
+                        **base_conflict(),
                         "drug": norm_name,
                         "type": "INCOMPLETE_DATA",
                         "severity": "LOW",
@@ -98,6 +115,7 @@ def reconcile_medications(sources):
                 if key not in conflict_set:
                     conflict_set.add(key)
                     conflicts.append({
+                        **base_conflict(),
                         "drug": norm_name,
                         "type": "INCOMPLETE_DATA",
                         "severity": "LOW",
@@ -111,6 +129,7 @@ def reconcile_medications(sources):
                 if key not in conflict_set:
                     conflict_set.add(key)
                     conflicts.append({
+                        **base_conflict(),
                         "drug": norm_name,
                         "type": "DOSAGE_MISMATCH",
                         "severity": SEVERITY["DOSAGE_MISMATCH"],
@@ -124,6 +143,7 @@ def reconcile_medications(sources):
                 if key not in conflict_set:
                     conflict_set.add(key)
                     conflicts.append({
+                        **base_conflict(),
                         "drug": norm_name,
                         "type": "FREQUENCY_MISMATCH",
                         "severity": SEVERITY["FREQUENCY_MISMATCH"],
@@ -151,6 +171,7 @@ def reconcile_medications(sources):
             if key not in conflict_set:
                 conflict_set.add(key)
                 conflicts.append({
+                    **base_conflict(),
                     "drug": drug,
                     "type": "MISSING_MEDICATION",
                     "severity": SEVERITY["MISSING_MEDICATION"],

@@ -16,3 +16,11 @@ for generic, data in DRUG_DB.items():
         BRAND_LOOKUP[brand] = generic
     for syn in data.get("synonyms", []):
         SYNONYM_LOOKUP[syn] = generic
+
+
+DRUG_CLASS = {
+    "paracetamol": "analgesic",
+    "ibuprofen": "nsaid",
+    "diclofenac": "nsaid",
+    "naproxen": "nsaid"
+}

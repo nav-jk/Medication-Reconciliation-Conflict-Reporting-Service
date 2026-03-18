@@ -23,3 +23,6 @@ class ReconcileStore(BaseModel):
     sources: List[List[Dict[str, Any]]]
     unified: List[Dict[str, Any]]
     conflicts: List[Dict[str, Any]]
+
+class ResolveRequest(BaseModel):
+    reason: str
