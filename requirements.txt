@@ -1,6 +1,7 @@
 fastapi>=0.110
-uvicorn[standard]
-motor
+uvicorn[standard]>=0.29
+motor>=3.3
 pydantic>=2.7
-pydantic-settings
-python-dotenv
+pydantic-settings>=2.0
+python-dotenv>=1.0
+pytest

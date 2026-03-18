@@ -1,0 +1,20 @@
+{
+  "paracetamol": {
+    "generic_name": "paracetamol",
+    "brands": ["crocin", "calpol", "tylenol", "pcm"],
+    "synonyms": ["acetaminophen"],
+    "class": "analgesic",
+    "forms": ["tablet", "syrup"],
+    "common_strengths_mg": [250, 500, 650],
+    "rxnorm_id": "161"
+  },
+  "ibuprofen": {
+    "generic_name": "ibuprofen",
+    "brands": ["brufen", "advil"],
+    "synonyms": [],
+    "class": "nsaid",
+    "forms": ["tablet"],
+    "common_strengths_mg": [200, 400],
+    "rxnorm_id": "5640"
+  }
+}
