@@ -1,0 +1,12 @@
+SEVERITY = {
+    "DOSAGE_MISMATCH": "HIGH",
+    "FREQUENCY_MISMATCH": "MEDIUM",
+    "UNCOMMON_DOSAGE": "MEDIUM",
+    "MISSING_MEDICATION": "HIGH"
+}
+
+SOURCE_PRIORITY = {
+    "EMR": 3,
+    "Discharge": 2,
+    "Patient": 1
+}

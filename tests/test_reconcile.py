@@ -52,3 +52,56 @@ def test_uncommon_dosage():
     unified, conflicts = reconcile_medications(sources)
 
     assert any(c["type"] == "UNCOMMON_DOSAGE" for c in conflicts)
+
+def test_missing_medication():
+    sources = [
+        [
+            DummyMed("Paracetamol", "500mg", "BID", "EMR"),
+            DummyMed("Ibuprofen", "200mg", "OD", "EMR")
+        ],
+        [
+            DummyMed("Paracetamol", "500mg", "BID", "Patient")
+        ]
+    ]
+
+    unified, conflicts = reconcile_medications(sources)
+
+    assert any(c["type"] == "MISSING_MEDICATION" for c in conflicts)
+
+def test_duplicate_entry():
+    sources = [
+        [
+            DummyMed("Paracetamol", "500mg", "BID", "EMR"),
+            DummyMed("Paracetamol", "500mg", "BID", "EMR")
+        ]
+    ]
+
+    _, conflicts = reconcile_medications(sources)
+
+    assert any(c["type"] == "DUPLICATE_ENTRY" for c in conflicts)
+
+def test_source_priority():
+    sources = [
+        [DummyMed("Paracetamol", "650mg", "BID", "Patient")],
+        [DummyMed("Paracetamol", "500mg", "BID", "EMR")]
+    ]
+
+    unified, _ = reconcile_medications(sources)
+
+    assert unified[0]["dosage"] == "500mg"
+
+def test_missing_medication():
+    sources = [
+        [
+            DummyMed("Paracetamol", "500mg", "BID", "EMR"),
+            DummyMed("Ibuprofen", "200mg", "OD", "EMR")
+        ],
+        [
+            DummyMed("Paracetamol", "500mg", "BID", "Patient")
+        ]
+    ]
+
+    _, conflicts = reconcile_medications(sources)
+
+    assert any(c["type"] == "MISSING_MEDICATION" for c in conflicts)
+
