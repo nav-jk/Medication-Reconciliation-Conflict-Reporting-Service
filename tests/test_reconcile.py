@@ -105,3 +105,23 @@ def test_missing_medication():
 
     assert any(c["type"] == "MISSING_MEDICATION" for c in conflicts)
 
+def test_incomplete_data():
+    sources = [
+        [DummyMed("Paracetamol", None, "BID", "EMR")],
+        [DummyMed("Paracetamol", "500mg", "BID", "Patient")]
+    ]
+
+    _, conflicts = reconcile_medications(sources)
+
+    assert any(c["type"] == "INCOMPLETE_DATA" for c in conflicts)
+
+def test_incomplete_data():
+    sources = [
+        [DummyMed("Paracetamol", None, "BID", "EMR")],
+        [DummyMed("Paracetamol", "500mg", "BID", "Patient")]
+    ]
+
+    _, conflicts = reconcile_medications(sources)
+
+    assert any(c["type"] == "INCOMPLETE_DATA" for c in conflicts)
+

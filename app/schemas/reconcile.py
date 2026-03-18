@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List,Dict, Any
 from app.schemas.medication import MedicationBase
 
 
@@ -16,3 +16,10 @@ class Conflict(BaseModel):
 class ReconcileResponse(BaseModel):
     unified_medications: List[MedicationBase]
     conflicts: List[Conflict]
+
+ 
+class ReconcileStore(BaseModel):
+    patient_id: str
+    sources: List[List[Dict[str, Any]]]
+    unified: List[Dict[str, Any]]
+    conflicts: List[Dict[str, Any]]

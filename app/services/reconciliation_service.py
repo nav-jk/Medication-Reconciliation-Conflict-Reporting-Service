@@ -13,7 +13,7 @@ def reconcile_medications(sources):
     conflicts = []
     conflict_set = set()
     source_drug_map = {}
-    seen_entries = set()  # ✅ FIX: moved inside
+    seen_entries = set()
 
     # 🔹 Step 1: Track drugs per source
     for source in sources:
@@ -28,7 +28,7 @@ def reconcile_medications(sources):
             norm_dosage = normalize_dosage(med.dosage)
             norm_freq = normalize_frequency(med.frequency)
 
-            # 🔥 DUPLICATE DETECTION (FIRST THING)
+            # 🔥 DUPLICATE DETECTION
             entry_key = (med.source, norm_name, norm_dosage, norm_freq)
 
             if entry_key in seen_entries:
@@ -69,7 +69,7 @@ def reconcile_medications(sources):
                     "dosage": norm_dosage,
                     "frequency": norm_freq,
                     "sources": [med.source],
-                    "_priority": SOURCE_PRIORITY.get(med.source, 0)  # ✅ track priority
+                    "_priority": SOURCE_PRIORITY.get(med.source, 0)
                 }
                 continue
 
@@ -79,6 +79,31 @@ def reconcile_medications(sources):
                 existing["sources"].append(med.source)
 
             current_priority = SOURCE_PRIORITY.get(med.source, 0)
+
+            # 🔥 INCOMPLETE DATA (NEW FIX)
+            if (existing["dosage"] is None and norm_dosage) or (existing["dosage"] and norm_dosage is None):
+                key = (norm_name, "INCOMPLETE_DATA", "dosage")
+                if key not in conflict_set:
+                    conflict_set.add(key)
+                    conflicts.append({
+                        "drug": norm_name,
+                        "type": "INCOMPLETE_DATA",
+                        "severity": "LOW",
+                        "field": "dosage",
+                        "sources": existing["sources"]
+                    })
+
+            if (existing["frequency"] is None and norm_freq) or (existing["frequency"] and norm_freq is None):
+                key = (norm_name, "INCOMPLETE_DATA", "frequency")
+                if key not in conflict_set:
+                    conflict_set.add(key)
+                    conflicts.append({
+                        "drug": norm_name,
+                        "type": "INCOMPLETE_DATA",
+                        "severity": "LOW",
+                        "field": "frequency",
+                        "sources": existing["sources"]
+                    })
 
             # 🔹 DOSAGE conflict
             if norm_dosage and existing["dosage"] and norm_dosage != existing["dosage"]:
@@ -106,17 +131,16 @@ def reconcile_medications(sources):
                         "sources": existing["sources"]
                     })
 
-            # 🔥 PRIORITY-BASED UPDATE (FIXED)
+            # 🔥 PRIORITY UPDATE
             if norm_dosage and current_priority > existing["_priority"]:
                 existing["dosage"] = norm_dosage
 
             if norm_freq and current_priority > existing["_priority"]:
                 existing["frequency"] = norm_freq
 
-            # 🔥 Update highest priority seen
             existing["_priority"] = max(existing["_priority"], current_priority)
 
-    # 🔹 Step 3: Missing medication detection
+    # 🔹 Step 3: Missing meds
     all_drugs = set(med_map.keys())
 
     for source_name, drugs in source_drug_map.items():
