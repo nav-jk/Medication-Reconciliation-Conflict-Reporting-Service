@@ -8,7 +8,7 @@ class ReconciliationRepository:
     async def create(self, patient_id, sources, unified, conflicts):
         doc = {
             "patient_id": patient_id,
-            "timestamp": datetime.now(timezone.utc),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "sources": sources,
             "unified": unified,
             "conflicts": conflicts

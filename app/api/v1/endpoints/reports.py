@@ -1,16 +1,29 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from datetime import datetime, timedelta, timezone
 from app.dependencies.db import get_db
 
 router = APIRouter()
 
 
 @router.get("/conflicts")
-async def patients_with_conflicts(db=Depends(get_db)):
+async def get_conflict_report(
+    min_conflicts: int = Query(1, ge=1),
+    days: int | None = Query(None, ge=1),
+    db=Depends(get_db)
+):
     collection = db["reconciliations"]
+
+    match_stage = {
+        "conflicts.status": "unresolved"
+    }
+
+    if days:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        match_stage["timestamp"] = {"$gte": cutoff.isoformat()}
 
     pipeline = [
         {"$unwind": "$conflicts"},
-        {"$match": {"conflicts.status": "unresolved"}},
+        {"$match": match_stage},
         {
             "$group": {
                 "_id": "$patient_id",
@@ -18,10 +31,15 @@ async def patients_with_conflicts(db=Depends(get_db)):
             }
         },
         {
+            "$match": {
+                "conflict_count": {"$gte": min_conflicts}
+            }
+        },
+        {
             "$project": {
+                "_id": 0,
                 "patient_id": "$_id",
-                "conflict_count": 1,
-                "_id": 0
+                "conflict_count": 1
             }
         }
     ]
@@ -30,4 +48,10 @@ async def patients_with_conflicts(db=Depends(get_db)):
     async for doc in collection.aggregate(pipeline):
         results.append(doc)
 
-    return results
+    return {
+        "filters": {
+            "min_conflicts": min_conflicts,
+            "days": days
+        },
+        "results": results
+    }
