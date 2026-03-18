@@ -139,3 +139,73 @@ def test_no_conflict_case():
     _, conflicts = reconcile_medications(sources)
 
     assert len(conflicts) == 0
+
+def test_stopped_vs_priority():
+    sources = [
+        [DummyMed("Paracetamol", "500mg", "stopped", "Patient")],
+        [DummyMed("Paracetamol", "500mg", "BID", "EMR")]
+    ]
+
+    unified, conflicts = reconcile_medications(sources)
+
+    assert unified[0]["frequency"] == "twice daily"
+    assert any(c["type"] == "MEDICATION_STOPPED_CONFLICT" for c in conflicts)
+
+def test_class_conflict_cross_sources():
+    sources = [
+        [DummyMed("Ibuprofen", "200mg", "OD", "EMR")],
+        [DummyMed("Diclofenac", "50mg", "OD", "Patient")]
+    ]
+
+    _, conflicts = reconcile_medications(sources)
+
+    assert any(c["type"] == "DRUG_CLASS_CONFLICT" for c in conflicts)
+
+def test_no_class_conflict_single():
+    sources = [
+        [DummyMed("Ibuprofen", "200mg", "OD", "EMR")]
+    ]
+
+    _, conflicts = reconcile_medications(sources)
+
+    assert not any(c["type"] == "DRUG_CLASS_CONFLICT" for c in conflicts)
+
+def test_conflict_deduplication():
+    sources = [
+        [DummyMed("Paracetamol", "500mg", "BID", "EMR")],
+        [DummyMed("Paracetamol", "650mg", "BID", "Patient")],
+        [DummyMed("Paracetamol", "650mg", "BID", "Discharge")]
+    ]
+
+    _, conflicts = reconcile_medications(sources)
+
+    dosage_conflicts = [c for c in conflicts if c["type"] == "DOSAGE_MISMATCH"]
+
+    assert len(dosage_conflicts) == 1
+
+def test_conflict_fields_consistency():
+    sources = [
+        [DummyMed("Paracetamol", "500mg", "BID", "EMR")],
+        [DummyMed("Paracetamol", "650mg", "OD", "Patient")]
+    ]
+
+    _, conflicts = reconcile_medications(sources)
+
+    for c in conflicts:
+        assert "id" in c
+        assert "status" in c
+        assert "detected_at" in c
+        assert c["status"] == "unresolved"
+
+def test_multiple_conflict_types():
+    sources = [
+        [DummyMed("Ibuprofen", "200mg", "OD", "EMR")],
+        [DummyMed("Diclofenac", "50mg", "OD", "Patient")]
+    ]
+
+    _, conflicts = reconcile_medications(sources)
+
+    types = {c["type"] for c in conflicts}
+
+    assert "DRUG_CLASS_CONFLICT" in types
+
