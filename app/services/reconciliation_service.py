@@ -1,3 +1,6 @@
+import uuid
+from datetime import datetime, timezone
+
 from app.utils.normalizer import (
     normalize_name,
     normalize_dosage,
@@ -6,9 +9,7 @@ from app.utils.normalizer import (
 )
 from app.utils.validator import validate_dosage
 from app.utils.constants import SEVERITY, SOURCE_PRIORITY
-
-from datetime import datetime, timezone
-import uuid
+from app.utils.drug_db import CLASS_LOOKUP
 
 
 # 🔥 Standard conflict structure
@@ -160,7 +161,30 @@ def reconcile_medications(sources):
 
             existing["_priority"] = max(existing["_priority"], current_priority)
 
-    # 🔹 Step 3: Missing meds
+    # 🔥 STEP 3: Drug class interaction detection (CORRECT POSITION)
+    class_map = {}
+
+    for drug in med_map.keys():
+        drug_class = CLASS_LOOKUP.get(drug)
+        if not drug_class:
+            continue
+        class_map.setdefault(drug_class, []).append(drug)
+
+    for drug_class, drugs in class_map.items():
+        if len(drugs) > 1:
+            key = (drug_class, "CLASS_CONFLICT")
+            if key not in conflict_set:
+                conflict_set.add(key)
+                conflicts.append({
+                    **base_conflict(),
+                    "type": "DRUG_CLASS_CONFLICT",
+                    "severity": "HIGH",
+                    "drug_class": drug_class,
+                    "drugs": drugs,
+                    "reason": f"Multiple drugs from same class ({drug_class}) detected"
+                })
+
+    # 🔹 Step 4: Missing meds
     all_drugs = set(med_map.keys())
 
     for source_name, drugs in source_drug_map.items():

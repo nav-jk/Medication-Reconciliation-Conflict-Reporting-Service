@@ -16,5 +16,14 @@
     "forms": ["tablet"],
     "common_strengths_mg": [200, 400],
     "rxnorm_id": "5640"
+  },
+  "diclofenac": {
+    "generic_name": "diclofenac",
+    "brands": ["voveran"],
+    "synonyms": [],
+    "class": "nsaid",
+    "forms": ["tablet"],
+    "common_strengths_mg": [50],
+    "rxnorm_id": "3355"
   }
 }

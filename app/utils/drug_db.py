@@ -18,9 +18,8 @@ for generic, data in DRUG_DB.items():
         SYNONYM_LOOKUP[syn] = generic
 
 
-DRUG_CLASS = {
-    "paracetamol": "analgesic",
-    "ibuprofen": "nsaid",
-    "diclofenac": "nsaid",
-    "naproxen": "nsaid"
+# 🔥 New: class lookup
+CLASS_LOOKUP = {
+    drug: data["class"]
+    for drug, data in DRUG_DB.items()
 }
