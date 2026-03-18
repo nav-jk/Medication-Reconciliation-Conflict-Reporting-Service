@@ -23,6 +23,14 @@ def base_conflict():
     }
 
 
+# 🔥 NEW: stopped detection
+def is_stopped(freq: str):
+    if not freq:
+        return False
+    freq = freq.lower()
+    return freq in ["stopped", "discontinued", "stop"]
+
+
 def reconcile_medications(sources):
     med_map = {}
     conflicts = []
@@ -42,6 +50,8 @@ def reconcile_medications(sources):
             norm_name = normalize_name(med.name)
             norm_dosage = normalize_dosage(med.dosage)
             norm_freq = normalize_frequency(med.frequency)
+
+            stopped_flag = is_stopped(norm_freq)
 
             # 🔥 DUPLICATE DETECTION
             entry_key = (med.source, norm_name, norm_dosage, norm_freq)
@@ -84,7 +94,8 @@ def reconcile_medications(sources):
                 med_map[norm_name] = {
                     "name": norm_name,
                     "dosage": norm_dosage,
-                    "frequency": norm_freq,
+                    "frequency": None if stopped_flag else norm_freq,
+                    "is_stopped": stopped_flag,
                     "sources": [med.source],
                     "_priority": SOURCE_PRIORITY.get(med.source, 0)
                 }
@@ -96,6 +107,20 @@ def reconcile_medications(sources):
                 existing["sources"].append(med.source)
 
             current_priority = SOURCE_PRIORITY.get(med.source, 0)
+
+            # 🔥 STOPPED MEDICATION CONFLICT
+            if stopped_flag != existing.get("is_stopped", False):
+                key = (norm_name, "MEDICATION_STOPPED_CONFLICT")
+                if key not in conflict_set:
+                    conflict_set.add(key)
+                    conflicts.append({
+                        **base_conflict(),
+                        "drug": norm_name,
+                        "type": "MEDICATION_STOPPED_CONFLICT",
+                        "severity": "HIGH",
+                        "sources": existing["sources"],
+                        "reason": "Medication active in one source but stopped in another"
+                    })
 
             # 🔥 INCOMPLETE DATA
             if (existing["dosage"] is None and norm_dosage) or (existing["dosage"] and norm_dosage is None):
@@ -159,9 +184,13 @@ def reconcile_medications(sources):
             if norm_freq and current_priority > existing["_priority"]:
                 existing["frequency"] = norm_freq
 
+            # update stopped flag with priority
+            if current_priority > existing["_priority"]:
+                existing["is_stopped"] = stopped_flag
+
             existing["_priority"] = max(existing["_priority"], current_priority)
 
-    # 🔥 STEP 3: Drug class interaction detection (CORRECT POSITION)
+    # 🔥 STEP 3: Drug class interaction detection
     class_map = {}
 
     for drug in med_map.keys():
