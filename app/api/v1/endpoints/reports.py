@@ -4,7 +4,10 @@ from app.dependencies.db import get_db
 
 router = APIRouter()
 
+def serialize(doc):
+    return doc
 
+    
 @router.get("/conflicts")
 async def get_conflict_report(
     min_conflicts: int = Query(1, ge=1),
@@ -22,17 +25,18 @@ async def get_conflict_report(
         match_stage["timestamp"] = {"$gte": cutoff.isoformat()}
 
     pipeline = [
-        {"$unwind": "$conflicts"},
-        {"$match": match_stage},
+        {
+            "$unwind": "$conflicts"
+        },
+        {
+            "$match": {
+                "conflicts.status": "unresolved"
+            }
+        },
         {
             "$group": {
                 "_id": "$patient_id",
                 "conflict_count": {"$sum": 1}
-            }
-        },
-        {
-            "$match": {
-                "conflict_count": {"$gte": min_conflicts}
             }
         },
         {
@@ -46,7 +50,7 @@ async def get_conflict_report(
 
     results = []
     async for doc in collection.aggregate(pipeline):
-        results.append(doc)
+        results.append(serialize(doc))
 
     return {
         "filters": {

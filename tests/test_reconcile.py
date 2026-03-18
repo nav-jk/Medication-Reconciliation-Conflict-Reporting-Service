@@ -207,5 +207,4 @@ def test_multiple_conflict_types():
 
     types = {c["type"] for c in conflicts}
 
-    assert "DRUG_CLASS_CONFLICT" in types
-
+    assert "BLACKLISTED_COMBINATION" in types
