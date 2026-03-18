@@ -1,0 +1,20 @@
+{
+  "dosage_limits": {
+    "paracetamol": {
+      "min_mg": 250,
+      "max_mg": 1000
+    },
+    "ibuprofen": {
+      "min_mg": 200,
+      "max_mg": 800
+    },
+    "diclofenac": {
+      "min_mg": 25,
+      "max_mg": 100
+    }
+  },
+
+  "blacklisted_combinations": [
+    ["ibuprofen", "diclofenac"]
+  ]
+}

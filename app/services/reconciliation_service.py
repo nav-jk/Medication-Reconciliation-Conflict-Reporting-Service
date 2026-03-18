@@ -9,7 +9,7 @@ from app.utils.normalizer import (
 )
 from app.utils.validator import validate_dosage
 from app.utils.constants import SEVERITY, SOURCE_PRIORITY
-from app.utils.drug_db import CLASS_LOOKUP
+from app.utils.conflict_rules import BLACKLISTED_COMBINATIONS
 
 
 # 🔥 Standard conflict structure
@@ -23,7 +23,6 @@ def base_conflict():
     }
 
 
-# 🔥 NEW: stopped detection
 def is_stopped(freq: str):
     if not freq:
         return False
@@ -73,7 +72,7 @@ def reconcile_medications(sources):
 
             dosage_val = extract_dosage_value(norm_dosage)
 
-            # 🔹 Validation
+            # 🔹 DOSAGE VALIDATION (RULE-BASED)
             if dosage_val:
                 validation_issue = validate_dosage(norm_name, dosage_val)
                 if validation_issue:
@@ -184,33 +183,27 @@ def reconcile_medications(sources):
             if norm_freq and current_priority > existing["_priority"]:
                 existing["frequency"] = norm_freq
 
-            # update stopped flag with priority
             if current_priority > existing["_priority"]:
                 existing["is_stopped"] = stopped_flag
 
             existing["_priority"] = max(existing["_priority"], current_priority)
 
-    # 🔥 STEP 3: Drug class interaction detection
-    class_map = {}
+    # 🔥 STEP 3: BLACKLISTED COMBINATIONS (REPLACES CLASS LOGIC)
+    drugs_present = list(med_map.keys())
 
-    for drug in med_map.keys():
-        drug_class = CLASS_LOOKUP.get(drug)
-        if not drug_class:
-            continue
-        class_map.setdefault(drug_class, []).append(drug)
+    for combo in BLACKLISTED_COMBINATIONS:
+        if all(drug in drugs_present for drug in combo):
+            key = tuple(sorted(combo)) + ("BLACKLISTED_COMBINATION",)
 
-    for drug_class, drugs in class_map.items():
-        if len(drugs) > 1:
-            key = (drug_class, "CLASS_CONFLICT")
             if key not in conflict_set:
                 conflict_set.add(key)
+
                 conflicts.append({
                     **base_conflict(),
-                    "type": "DRUG_CLASS_CONFLICT",
+                    "type": "BLACKLISTED_COMBINATION",
                     "severity": "HIGH",
-                    "drug_class": drug_class,
-                    "drugs": drugs,
-                    "reason": f"Multiple drugs from same class ({drug_class}) detected"
+                    "drugs": combo,
+                    "reason": "Known unsafe drug combination"
                 })
 
     # 🔹 Step 4: Missing meds
@@ -237,4 +230,4 @@ def reconcile_medications(sources):
         med.pop("_priority", None)
         unified.append(med)
 
-    return unified, conflicts
+    return unified, conflicts   

@@ -74,7 +74,7 @@ def test_drug_class_conflict():
 
     _, conflicts = reconcile_medications(sources)
 
-    assert any(c["type"] == "DRUG_CLASS_CONFLICT" for c in conflicts)
+    assert any(c["type"] == "BLACKLISTED_COMBINATION" for c in conflicts)
 
 
 # 🔥 6. Dosage mismatch
@@ -159,7 +159,7 @@ def test_class_conflict_cross_sources():
 
     _, conflicts = reconcile_medications(sources)
 
-    assert any(c["type"] == "DRUG_CLASS_CONFLICT" for c in conflicts)
+    assert any(c["type"] == "BLACKLISTED_COMBINATION" for c in conflicts)
 
 def test_no_class_conflict_single():
     sources = [
@@ -168,7 +168,7 @@ def test_no_class_conflict_single():
 
     _, conflicts = reconcile_medications(sources)
 
-    assert not any(c["type"] == "DRUG_CLASS_CONFLICT" for c in conflicts)
+    assert not any(c["type"] == "BLACKLISTED_COMBINATION" for c in conflicts)
 
 def test_conflict_deduplication():
     sources = [

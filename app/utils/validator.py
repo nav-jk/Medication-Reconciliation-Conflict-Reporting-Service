@@ -1,17 +1,16 @@
-from app.utils.drug_db import DRUG_DB
+from app.utils.conflict_rules import DOSAGE_LIMITS
 
 
-def validate_dosage(drug_name: str, dosage_mg: int):
-    if drug_name not in DRUG_DB:
-        return None  # unknown drug, skip validation
+def validate_dosage(drug, dosage):
+    if drug not in DOSAGE_LIMITS:
+        return None
 
-    allowed = DRUG_DB[drug_name].get("common_strengths_mg", [])
+    limits = DOSAGE_LIMITS[drug]
 
-    if dosage_mg not in allowed:
-        return {
-            "type": "UNCOMMON_DOSAGE",
-            "message": f"{dosage_mg}mg is not a common strength",
-            "expected": allowed
-        }
+    if dosage < limits["min_mg"]:
+        return f"Dosage too low (<{limits['min_mg']}mg)"
 
-    return None 
+    if dosage > limits["max_mg"]:
+        return f"Dosage too high (>{limits['max_mg']}mg)"
+
+    return None

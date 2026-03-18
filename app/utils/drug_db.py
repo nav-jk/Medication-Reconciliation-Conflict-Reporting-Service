@@ -17,9 +17,3 @@ for generic, data in DRUG_DB.items():
     for syn in data.get("synonyms", []):
         SYNONYM_LOOKUP[syn] = generic
 
-
-# 🔥 New: class lookup
-CLASS_LOOKUP = {
-    drug: data["class"]
-    for drug, data in DRUG_DB.items()
-}
