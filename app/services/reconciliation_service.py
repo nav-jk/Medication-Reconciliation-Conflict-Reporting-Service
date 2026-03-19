@@ -47,7 +47,28 @@ def reconcile_medications(sources):
     for source in sources:
         for med in source:
             norm_name = normalize_name(med.name)
+
+            if not norm_name:
+                continue
+
             norm_dosage = normalize_dosage(med.dosage)
+
+            # 🔥 INVALID DOSAGE → treat as incomplete data
+            if med.dosage and norm_dosage is None:
+                key = (norm_name, "INCOMPLETE_DATA", "dosage", med.source)
+
+                if key not in conflict_set:
+                    conflict_set.add(key)
+                    conflicts.append({
+                        **base_conflict(),
+                        "drug": norm_name,
+                        "type": "INCOMPLETE_DATA",
+                        "severity": "LOW",
+                        "field": "dosage",
+                        "source": med.source,
+                        "reason": "Invalid dosage format"
+                    })
+                    
             norm_freq = normalize_frequency(med.frequency)
 
             stopped_flag = is_stopped(norm_freq)
@@ -230,4 +251,4 @@ def reconcile_medications(sources):
         med.pop("_priority", None)
         unified.append(med)
 
-    return unified, conflicts   
+    return unified, conflicts       

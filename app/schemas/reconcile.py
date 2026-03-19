@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import List,Dict, Any
 from app.schemas.medication import MedicationBase
+from app.schemas.resolve import ResolveRequest
 
 
 class ReconcileRequest(BaseModel):
