@@ -451,19 +451,39 @@ Generates 10–20 patients with multiple reconciliation versions per patient, us
 - Add caching for aggregation endpoints to improve performance at scale
 
 ---
-
 ## AI Usage
-
-AI assistance was used for FastAPI boilerplate scaffolding, debugging aggregation pipeline issues, and structuring initial test cases. All aggregation pipelines, data model decisions, and conflict resolution logic were manually reviewed and refined.
-
-One notable point of disagreement: the AI initially suggested a flat schema for storing conflict data. This was rejected in favour of versioned snapshots, which more accurately models real-world medical history and supports the longitudinal tracking requirements of the system.
-
+ 
+AI assistance was used for the following:
+ 
+- FastAPI boilerplate scaffolding and project structure
+- Debugging aggregation pipeline issues
+- Structuring initial test cases
+- Building a mock frontend for demo and visualisation purposes
+ 
+All aggregation pipelines, data model decisions, and conflict resolution logic were manually reviewed and refined.
+ 
+**Where I disagreed with the AI:** the AI initially suggested a flat schema for storing conflict data. This was rejected in favour of versioned snapshots — a flat schema would have made longitudinal tracking impractical and would not have preserved the medical history in a way that reflects how conflicts actually evolve over time.
+ 
 ---
 
 ## Demo
-
-A basic UI was built for demonstration purposes. A demo video can be found here: *(link pending)*
-
+ 
+A full video walkthrough is available here: [Demo Video](https://youtu.be/Gu7W0fLqTf0)
+ 
+The recording covers the following flows in order:
+ 
+**1. Data seeding** — the seed script is executed, populating MongoDB with 10–20 synthetic patients across multiple clinics, each with varied conflict scenarios including dosage mismatches, stopped-vs-active discrepancies, and blacklisted combinations.
+ 
+**2. API walkthrough (FastAPI docs)** — the interactive FastAPI documentation is used to demonstrate the following endpoints live:
+ 
+- `GET /api/v1/reconcile/{patient_id}` — retrieving a full reconciliation record with its complete version history
+- `GET /api/v1/reports/conflicts` — global conflict report filtered across all patients
+- `GET /api/v1/reports/clinic/{clinic_id}/patients-with-conflicts` — listing patients with unresolved conflicts for a given clinic
+- `GET /api/v1/reports/clinic/conflict-summary` — aggregated conflict counts per clinic within a 30-day window
+- `GET /api/v1/patients/{patient_id}/timeline` — full versioned medication timeline for a single patient
+ 
+**3. Frontend walkthrough** — a mock frontend (AI-generated for demo purposes) is used to walk through the same features via a UI, demonstrating conflict detection, patient timelines, and clinic-level reporting in context.
+ 
 ---
 
 ## Final Note
