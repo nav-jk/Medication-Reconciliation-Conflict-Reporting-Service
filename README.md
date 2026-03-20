@@ -13,6 +13,141 @@ Different sources (EMR, hospital discharge, patient-reported) often provide conf
 - Provides clinic-level analytics and reporting
 
 ---
+### Architecture
+
+flowchart TB
+
+%% =========================
+%% CLIENT LAYER
+%% =========================
+subgraph CLIENT["Client Layer"]
+    A1[Frontend UI<br/>HTML / JS]
+    A2[Postman / API Clients]
+end
+
+%% =========================
+%% API LAYER
+%% =========================
+subgraph API["FastAPI Layer"]
+    B1[/POST /reconcile/]
+    B2[/PATCH /resolve/]
+    B3[/GET /patients/]
+    B4[/GET /reports/]
+end
+
+%% =========================
+%% SERVICE LAYER
+%% =========================
+subgraph SERVICE["Service Layer"]
+    C1[Reconciliation Engine]
+
+    subgraph NORMALIZATION["Normalization Module"]
+        C2[Name Normalizer]
+        C3[Dosage Normalizer]
+        C4[Frequency Normalizer]
+    end
+
+    subgraph CONFLICT["Conflict Detection Engine"]
+        C5[Dosage Conflict]
+        C6[Frequency Conflict]
+        C7[Stopped vs Active]
+        C8[Duplicate Detection]
+        C9[Blacklisted Rules]
+    end
+
+    C10[Unified Medication Builder]
+end
+
+%% =========================
+%% VERSIONING LAYER
+%% =========================
+subgraph VERSIONING["Versioning & Audit Layer"]
+    D1[Create Snapshot]
+    D2[Append to versions[]]
+    D3[Maintain latest_version]
+end
+
+%% =========================
+%% REPOSITORY LAYER
+%% =========================
+subgraph REPO["Repository Layer"]
+    E1[ReconciliationRepository]
+    E2[PatientRepository]
+end
+
+%% =========================
+%% DATABASE
+%% =========================
+subgraph DB["MongoDB"]
+    F1[(reconciliations collection<br/>versioned documents)]
+    F2[(patients collection)]
+end
+
+%% =========================
+%% REPORTING
+%% =========================
+subgraph REPORTING["Aggregation / Reporting"]
+    G1[Extract Latest Version]
+    G2[Filter by Clinic / Time]
+    G3[Conflict Counting]
+    G4[Group by Patient / Clinic]
+end
+
+%% =========================
+%% DATA FLOW
+%% =========================
+
+%% Client to API
+A1 --> B1
+A2 --> B1
+A1 --> B2
+A1 --> B3
+A1 --> B4
+
+%% API to Service
+B1 --> C1
+B2 --> C1
+
+%% Normalization flow
+C1 --> C2
+C1 --> C3
+C1 --> C4
+
+%% Conflict detection
+C1 --> C5
+C1 --> C6
+C1 --> C7
+C1 --> C8
+C1 --> C9
+
+%% Build unified meds
+C1 --> C10
+
+%% Versioning
+C10 --> D1
+D1 --> D2
+D2 --> D3
+
+%% Repository
+D3 --> E1
+E1 --> F1
+
+%% Patient updates
+B1 --> E2
+E2 --> F2
+
+%% Reporting flow
+F1 --> G1
+G1 --> G2
+G2 --> G3
+G3 --> G4
+G4 --> B4
+
+%% Read back to client
+F1 --> E1
+E1 --> B3
+B3 --> A1
+B4 --> A1
 
 # Key Features — Detailed Logic & System Behavior
 

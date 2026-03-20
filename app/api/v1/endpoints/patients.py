@@ -83,35 +83,28 @@ async def get_patient(patient_id: str, db=Depends(get_db)):
 async def get_patient_timeline(patient_id: str, db=Depends(get_db)):
     collection = db["reconciliations"]
 
-    cursor = collection.find(
-        {"patient_id": patient_id}
-    ).sort("timestamp", 1)  # ascending (timeline)
+    doc = await collection.find_one({"patient_id": patient_id})
 
-    history = []
-
-    async for doc in cursor:
-        history.append({
-            "timestamp": doc.get("timestamp"),
-            "reconciliation_id": str(doc["_id"]),
-            "unified": doc.get("unified", []),
-            "conflicts": doc.get("conflicts", [])
-        })
-
-    if not history:
+    if not doc:
         raise HTTPException(status_code=404, detail="No history found")
 
-    #  Build timeline with changes
-    timeline = []
+    versions = doc.get("versions", [])
 
+    if not versions:
+        return {"patient_id": patient_id, "timeline": []}
+
+    versions = sorted(versions, key=lambda x: x.get("version", 0))
+
+    timeline = []
     prev = None
 
-    for snap in history:
+    for v in versions:
+        current_meds = {m["name"]: m for m in v.get("unified", [])}
+        prev_meds = {m["name"]: m for m in prev.get("unified", [])} if prev else {}
+
         changes = []
 
-        current_meds = {m["name"]: m for m in snap["unified"]}
-        prev_meds = {m["name"]: m for m in prev["unified"]} if prev else {}
-
-        #  Detect NEW meds
+        #  ADDED
         for name in current_meds:
             if name not in prev_meds:
                 changes.append({
@@ -120,7 +113,7 @@ async def get_patient_timeline(patient_id: str, db=Depends(get_db)):
                     "data": current_meds[name]
                 })
 
-        #  Detect REMOVED meds
+        #  REMOVED
         for name in prev_meds:
             if name not in current_meds:
                 changes.append({
@@ -129,7 +122,7 @@ async def get_patient_timeline(patient_id: str, db=Depends(get_db)):
                     "data": prev_meds[name]
                 })
 
-        #  Detect MODIFIED meds
+        #  MODIFIED
         for name in current_meds:
             if name in prev_meds:
                 curr = current_meds[name]
@@ -145,7 +138,7 @@ async def get_patient_timeline(patient_id: str, db=Depends(get_db)):
                             "new": curr.get(field)
                         })
 
-        #  Include corrections from conflicts
+        #  CORRECTIONS (resolved conflicts)
         corrections = [
             {
                 "drug": c.get("drug"),
@@ -154,19 +147,20 @@ async def get_patient_timeline(patient_id: str, db=Depends(get_db)):
                 "resolved_at": c.get("resolved_at"),
                 "reason": c.get("resolution_reason")
             }
-            for c in snap.get("conflicts", [])
+            for c in v.get("conflicts", [])
             if c.get("status") == "resolved"
         ]
 
         timeline.append({
-            "timestamp": snap["timestamp"],
-            "reconciliation_id": snap["reconciliation_id"],
-            "medications": snap["unified"],
+            "version": v.get("version"),
+            "timestamp": v.get("timestamp"),
+            "reconciliation_id": str(doc["_id"]),
+            "medications": v.get("unified", []),
             "changes": changes,
             "corrections": corrections
         })
 
-        prev = snap
+        prev = v
 
     return {
         "patient_id": patient_id,
