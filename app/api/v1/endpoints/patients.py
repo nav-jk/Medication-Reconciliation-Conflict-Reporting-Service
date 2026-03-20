@@ -100,7 +100,7 @@ async def get_patient_timeline(patient_id: str, db=Depends(get_db)):
     if not history:
         raise HTTPException(status_code=404, detail="No history found")
 
-    # 🔥 Build timeline with changes
+    #  Build timeline with changes
     timeline = []
 
     prev = None
@@ -111,7 +111,7 @@ async def get_patient_timeline(patient_id: str, db=Depends(get_db)):
         current_meds = {m["name"]: m for m in snap["unified"]}
         prev_meds = {m["name"]: m for m in prev["unified"]} if prev else {}
 
-        # 🔹 Detect NEW meds
+        #  Detect NEW meds
         for name in current_meds:
             if name not in prev_meds:
                 changes.append({
@@ -120,7 +120,7 @@ async def get_patient_timeline(patient_id: str, db=Depends(get_db)):
                     "data": current_meds[name]
                 })
 
-        # 🔹 Detect REMOVED meds
+        #  Detect REMOVED meds
         for name in prev_meds:
             if name not in current_meds:
                 changes.append({
@@ -129,7 +129,7 @@ async def get_patient_timeline(patient_id: str, db=Depends(get_db)):
                     "data": prev_meds[name]
                 })
 
-        # 🔹 Detect MODIFIED meds
+        #  Detect MODIFIED meds
         for name in current_meds:
             if name in prev_meds:
                 curr = current_meds[name]
@@ -145,7 +145,7 @@ async def get_patient_timeline(patient_id: str, db=Depends(get_db)):
                             "new": curr.get(field)
                         })
 
-        # 🔹 Include corrections from conflicts
+        #  Include corrections from conflicts
         corrections = [
             {
                 "drug": c.get("drug"),

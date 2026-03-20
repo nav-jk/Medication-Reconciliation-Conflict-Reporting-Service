@@ -12,7 +12,7 @@ from app.utils.constants import SEVERITY, SOURCE_PRIORITY
 from app.utils.conflict_rules import BLACKLISTED_COMBINATIONS
 
 
-# 🔥 Standard conflict structure
+
 def base_conflict():
     return {
         "id": str(uuid.uuid4()),
@@ -37,13 +37,13 @@ def reconcile_medications(sources):
     source_drug_map = {}
     seen_entries = set()
 
-    # 🔹 Step 1: Track drugs per source
+    #   Track drugs per source
     for source in sources:
         for med in source:
             norm_name = normalize_name(med.name)
             source_drug_map.setdefault(med.source, set()).add(norm_name)
 
-    # 🔹 Step 2: Process medications
+    #  Process medications
     for source in sources:
         for med in source:
             norm_name = normalize_name(med.name)
@@ -53,7 +53,7 @@ def reconcile_medications(sources):
 
             norm_dosage = normalize_dosage(med.dosage)
 
-            # 🔥 INVALID DOSAGE → treat as incomplete data
+   
             if med.dosage and norm_dosage is None:
                 key = (norm_name, "INCOMPLETE_DATA", "dosage", med.source)
 
@@ -73,7 +73,7 @@ def reconcile_medications(sources):
 
             stopped_flag = is_stopped(norm_freq)
 
-            # 🔥 DUPLICATE DETECTION
+
             entry_key = (med.source, norm_name, norm_dosage, norm_freq)
 
             if entry_key in seen_entries:
@@ -93,7 +93,7 @@ def reconcile_medications(sources):
 
             dosage_val = extract_dosage_value(norm_dosage)
 
-            # 🔹 DOSAGE VALIDATION (RULE-BASED)
+            #  DOSAGE VALIDATION 
             if dosage_val:
                 validation_issue = validate_dosage(norm_name, dosage_val)
                 if validation_issue:
@@ -109,7 +109,7 @@ def reconcile_medications(sources):
                             "source": med.source
                         })
 
-            # 🔹 First occurrence
+            #  First occurrence
             if norm_name not in med_map:
                 med_map[norm_name] = {
                     "name": norm_name,
@@ -128,7 +128,7 @@ def reconcile_medications(sources):
 
             current_priority = SOURCE_PRIORITY.get(med.source, 0)
 
-            # 🔥 STOPPED MEDICATION CONFLICT
+
             if stopped_flag != existing.get("is_stopped", False):
                 key = (norm_name, "MEDICATION_STOPPED_CONFLICT")
                 if key not in conflict_set:
@@ -142,7 +142,7 @@ def reconcile_medications(sources):
                         "reason": "Medication active in one source but stopped in another"
                     })
 
-            # 🔥 INCOMPLETE DATA
+
             if (existing["dosage"] is None and norm_dosage) or (existing["dosage"] and norm_dosage is None):
                 key = (norm_name, "INCOMPLETE_DATA", "dosage")
                 if key not in conflict_set:
@@ -169,7 +169,7 @@ def reconcile_medications(sources):
                         "sources": existing["sources"]
                     })
 
-            # 🔹 DOSAGE conflict
+            #  DOSAGE conflict
             if norm_dosage and existing["dosage"] and norm_dosage != existing["dosage"]:
                 key = (norm_name, "DOSAGE_MISMATCH")
                 if key not in conflict_set:
@@ -183,7 +183,7 @@ def reconcile_medications(sources):
                         "sources": existing["sources"]
                     })
 
-            # 🔹 FREQUENCY conflict
+            #  FREQUENCY conflict
             if norm_freq and existing["frequency"] and norm_freq != existing["frequency"]:
                 key = (norm_name, "FREQUENCY_MISMATCH")
                 if key not in conflict_set:
@@ -197,7 +197,7 @@ def reconcile_medications(sources):
                         "sources": existing["sources"]
                     })
 
-            # 🔥 PRIORITY UPDATE
+ 
             if norm_dosage and current_priority > existing["_priority"]:
                 existing["dosage"] = norm_dosage
 
@@ -209,7 +209,7 @@ def reconcile_medications(sources):
 
             existing["_priority"] = max(existing["_priority"], current_priority)
 
-    # 🔥 STEP 3: BLACKLISTED COMBINATIONS (REPLACES CLASS LOGIC)
+
     drugs_present = list(med_map.keys())
 
     for combo in BLACKLISTED_COMBINATIONS:
@@ -227,7 +227,7 @@ def reconcile_medications(sources):
                     "reason": "Known unsafe drug combination"
                 })
 
-    # 🔹 Step 4: Missing meds
+    #  Missing meds
     all_drugs = set(med_map.keys())
 
     for source_name, drugs in source_drug_map.items():
@@ -245,7 +245,7 @@ def reconcile_medications(sources):
                     "missing_in": source_name
                 })
 
-    # 🔹 Cleanup
+    #  Cleanup
     unified = []
     for med in med_map.values():
         med.pop("_priority", None)

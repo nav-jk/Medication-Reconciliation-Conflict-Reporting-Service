@@ -16,4 +16,4 @@ class MedicationRepository:
 
     async def create(self, doc):
         result = await self.collection.insert_one(doc)
-        return str(result.inserted_id)  # 🔥 IMPORTANT
+        return str(result.inserted_id)  

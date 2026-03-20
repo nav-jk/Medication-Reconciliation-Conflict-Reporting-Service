@@ -15,7 +15,7 @@ import copy
 router = APIRouter()
 
 
-# 🔥 Helper: serialize anything → dict (Mongo-safe)
+#  Helper: serialize anything → dict (Mongo-safe)
 def serialize(data):
     if isinstance(data, list):
         return [serialize(x) for x in data]
@@ -29,13 +29,12 @@ def serialize(data):
 
 @router.post("/")
 async def reconcile(payload: ReconcileRequest, db=Depends(get_db)):
-    print("📥 Incoming payload:", payload)
+    print(" Incoming payload:", payload)
 
     medication_repo = MedicationRepository(db)
 
-    # 🔥 STEP 0: Get sources
     if not payload.sources:
-        print("📦 Fetching medications from DB")
+        print(" Fetching medications from DB")
 
         meds = await medication_repo.get_by_patient(payload.patient_id)
 
@@ -55,9 +54,9 @@ async def reconcile(payload: ReconcileRequest, db=Depends(get_db)):
         ]
 
     else:
-        payload_sources = payload.sources  # ✅ keep Pydantic
+        payload_sources = payload.sources  #  keep Pydantic
 
-        # 🔥 also store meds in DB (history)
+
         for source in payload_sources:
             for med in source:
                 await medication_repo.create({
@@ -65,23 +64,20 @@ async def reconcile(payload: ReconcileRequest, db=Depends(get_db)):
                     "patient_id": payload.patient_id
                 })
 
-    # 🔥 STEP 1: Reconcile (Pydantic objects)
     try:
         unified, conflicts = reconcile_medications(payload_sources)
     except Exception as e:
-        print("❌ Reconciliation failed:", str(e))
+        print(" Reconciliation failed:", str(e))
         raise HTTPException(status_code=400, detail=str(e))
 
-    # 🔥 STEP 2: Convert everything to dict (VERY IMPORTANT)
     try:
         sources_dict = serialize(payload_sources)
         unified_dict = serialize(unified)
         conflicts_dict = serialize(conflicts)
     except Exception as e:
-        print("❌ Serialization failed:", str(e))
+        print(" Serialization failed:", str(e))
         raise HTTPException(status_code=500, detail="Serialization error")
 
-    # 🔥 STEP 3: Store in DB
     try:
         repo = ReconciliationRepository(db)
         rec_id = await repo.create(
@@ -89,18 +85,17 @@ async def reconcile(payload: ReconcileRequest, db=Depends(get_db)):
             sources_dict,
             unified,
             conflicts,
-            payload.clinic_id   # 🔥 NEW
+            payload.clinic_id  
         )
     except Exception as e:
-        print("❌ DB insert failed:", str(e))
+        print(" DB insert failed:", str(e))
         raise HTTPException(status_code=500, detail="Database error")
 
-    # 🔥 STEP 4: Update patient (non-blocking)
     try:
         patient_repo = PatientRepository(db)
         await patient_repo.upsert_patient(payload.patient_id)
     except Exception as e:
-        print("❌ Patient update failed:", str(e))
+        print(" Patient update failed:", str(e))
 
     return {
         "reconciliation_id": rec_id,
@@ -109,7 +104,7 @@ async def reconcile(payload: ReconcileRequest, db=Depends(get_db)):
     }
 
 
-# 🔹 GET: Patient reconciliation history
+#  GET: Patient reconciliation history
 @router.get("/{patient_id}")
 async def get_reconciliations(patient_id: str, db=Depends(get_db)):
     collection = db["reconciliations"]
@@ -135,7 +130,7 @@ async def get_reconciliations(patient_id: str, db=Depends(get_db)):
     return results
 
 
-# 🔹 PATCH: Resolve conflict (VERSIONED — NO OVERWRITE)
+#  PATCH: Resolve conflict (VERSIONED — NO OVERWRITE)
 @router.patch("/resolve/{reconciliation_id}/{conflict_id}")
 async def resolve_conflict(
     reconciliation_id: str,
@@ -159,18 +154,18 @@ async def resolve_conflict(
     if not doc.get("versions"):
         raise HTTPException(status_code=500, detail="Invalid reconciliation structure")
 
-    # 🔥 STEP 1: Get latest version
+
     latest_version = doc.get("latest_version", 1)
     current_state = doc["versions"][-1]
 
-    # 🔥 STEP 2: Deep copy (CRITICAL)
+
     new_unified = copy.deepcopy(current_state.get("unified", []))
     new_conflicts = copy.deepcopy(current_state.get("conflicts", []))
 
     updated = False
     target_drug = None
 
-    # 🔹 Step 3: Update conflict (on COPY)
+   
     for conflict in new_conflicts:
         if conflict.get("id") == conflict_id:
 
@@ -188,7 +183,7 @@ async def resolve_conflict(
     if not updated:
         raise HTTPException(status_code=404, detail="Conflict not found")
 
-    # 🔥 Step 4: Update unified meds (on COPY)
+ 
     if target_drug:
         for med in new_unified:
             if med.get("name") == target_drug:
@@ -205,7 +200,7 @@ async def resolve_conflict(
                 elif payload.field == "name":
                     med["name"] = payload.corrected_value
 
-    # 🔥 STEP 5: Create NEW VERSION
+
     new_version = {
         "version": latest_version + 1,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -220,7 +215,6 @@ async def resolve_conflict(
         }
     }
 
-    # 🔥 STEP 6: PUSH (append-only, no overwrite)
     try:
         await collection.update_one(
             {"_id": obj_id},
@@ -230,7 +224,7 @@ async def resolve_conflict(
             }
         )
     except Exception as e:
-        print("❌ Update failed:", str(e))
+        print(" Update failed:", str(e))
         raise HTTPException(status_code=500, detail="Update failed")
 
     return {

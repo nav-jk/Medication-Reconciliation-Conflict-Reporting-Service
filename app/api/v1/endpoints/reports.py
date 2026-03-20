@@ -82,7 +82,7 @@ async def patients_with_conflicts(clinic_id: str, db=Depends(get_db)):
     pipeline = [
         {"$match": {"clinic_id": clinic_id}},
 
-        # 🔥 get latest version
+
         {
             "$addFields": {
                 "latest": {"$arrayElemAt": ["$versions", -1]}

@@ -12,7 +12,7 @@ MEDICATION_URL = f"{BASE_URL}/api/v1/medications/"
 RECONCILE_URL = f"{BASE_URL}/api/v1/reconcile/"
 
 
-# 🔥 Clinics
+#  Clinics
 CLINICS = ["clinic_a", "clinic_b", "clinic_c"]
 
 
@@ -97,7 +97,7 @@ def generate_med_batch(patient_id, base_drugs):
 
 
 def seed():
-    print(f"\n🚀 Seeding system at: {BASE_URL}\n")
+    print(f"\n Seeding system at: {BASE_URL}\n")
 
     success = 0
     fail = 0
@@ -110,24 +110,22 @@ def seed():
 
         base_drugs = random.sample(DRUGS, random.randint(3, 5))
 
-        # 🔥 MULTIPLE TIME STEPS (versioning)
         for step in range(1, random.randint(2, 4)):
             print(f"  ⏳ Step {step}")
 
             meds = generate_med_batch(patient_id, base_drugs)
-
             # 🔹 Insert medications
             for med in meds:
                 try:
                     res = requests.post(MEDICATION_URL, json=med)
                     if res.status_code != 200:
-                        print("  ❌ Med insert failed:", res.text)
+                        print("   Med insert failed:", res.text)
                         fail += 1
                 except Exception as e:
-                    print("  ❌ Exception inserting med:", e)
+                    print("   Exception inserting med:", e)
                     fail += 1
 
-            # 🔹 Group meds into sources for reconciliation
+            #  Group meds into sources for reconciliation
             source_map = {}
             for m in meds:
                 source_map.setdefault(m["source"], []).append({
@@ -139,7 +137,7 @@ def seed():
 
             sources_payload = list(source_map.values())
 
-            # 🔹 Reconcile with clinic_id
+            #  Reconcile with clinic_id
             try:
                 res = requests.post(RECONCILE_URL, json={
                     "patient_id": patient_id,
@@ -148,21 +146,21 @@ def seed():
                 })
 
                 if res.status_code == 200:
-                    print(f"  ✅ Reconciled (version {step})")
+                    print(f"   Reconciled (version {step})")
                     success += 1
                 else:
-                    print("  ❌ Reconcile failed:", res.text)
+                    print("   Reconcile failed:", res.text)
                     fail += 1
 
             except Exception as e:
-                print("  ❌ Exception reconcile:", e)
+                print("   Exception reconcile:", e)
                 fail += 1
 
             time.sleep(0.2)
 
-    print("\n📊 Summary:")
-    print(f"✅ Success: {success}")
-    print(f"❌ Failed: {fail}")
+    print("\n Summary:")
+    print(f"Success: {success}")
+    print(f"Failed: {fail}")
 
 
 if __name__ == "__main__":

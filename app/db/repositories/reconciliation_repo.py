@@ -63,7 +63,7 @@ class ReconciliationRepository:
             {"patient_id": patient_id}
         ).sort("_id", -1):
 
-            # 🔥 skip bad docs
+            #  skip bad docs
             if not doc.get("versions"):
                 continue
 
@@ -81,7 +81,7 @@ class ReconciliationRepository:
                 "history": doc.get("versions", [])
             }
 
-            # 🔹 normalize timestamp (safety)
+            #  normalize timestamp 
             if isinstance(rec["timestamp"], datetime):
                 rec["timestamp"] = rec["timestamp"].isoformat()
 

@@ -1,13 +1,5 @@
 # Medication Reconciliation & Conflict Reporting Service
 
-**Track:** Backend / Data Engineering  
-**Stack:** FastAPI · MongoDB · Python  
-**Author:** Navaneet J  
-**Time Spent:** ~9–10 hours
-
----
-
-## Overview
 
 This project implements a **Medication Reconciliation & Conflict Reporting Service** designed for chronic-care workflows (e.g., dialysis patients).
 
@@ -22,105 +14,348 @@ Different sources (EMR, hospital discharge, patient-reported) often provide conf
 
 ---
 
-## Key Features
+# Key Features — Detailed Logic & System Behavior
 
-### 🔹 Core Functionality
-
-- Multi-source medication ingestion
-- Canonical normalization (name, dosage, frequency)
-- Conflict detection:
-  - Dosage mismatch
-  - Frequency mismatch
-  - Missing/incomplete data
-  - Duplicate entries
-  - Stopped vs active conflict
-  - Blacklisted combinations (via static rules)
-
-### 🔹 Versioning (Longitudinal Tracking)
-
-- Each reconciliation creates a new version
-- Full history preserved per patient
-- Snapshots include:
-  - Unified medications
-  - Conflicts
-  - Timestamp
-  - Action (`created` / `updated`)
-
-### 🔹 Conflict Resolution
-
-- Resolve conflicts with:
-  - `corrected_field` (name, dosage, frequency)
-  - `corrected_value`
-  - `resolution_reason`
-- Updates:
-  - Conflict status → `resolved`
-  - Unified medication list
-  - Audit metadata (timestamp + reason)
-
-### 🔹 Multi-Clinic Support
-
-- Each reconciliation tagged with `clinic_id`
-- Enables cross-clinic analytics
-
-### 🔹 Reporting & Aggregation
-
-- Patients with unresolved conflicts per clinic
-- Conflict summary across clinics (time-window based)
+This section explains how the system actually works internally, including normalization, conflict detection, and data handling.
+The goal is to make the system understandable even without running it.
 
 ---
 
-## Architecture Overview
+## Core Functionality (Detailed)
 
-```
-Frontend (HTML/JS)
-        ↓
-FastAPI Layer (Routes)
-        ↓
-Service Layer (Reconciliation Logic)
-        ↓
-Repository Layer (MongoDB)
-        ↓
-MongoDB (Versioned Documents)
-```
+### 1. Multi-Source Medication Ingestion
 
-**Data Flow:**
-
-1. Client submits medication lists
-2. Service normalizes + detects conflicts
-3. Repository stores new version snapshot
-4. Aggregation queries operate on latest version
-
----
-
-## Data Model
-
-### 🔹 Collection: `reconciliations`
+Each request contains:
 
 ```json
 {
-  "_id": "ObjectId",
   "patient_id": "p1",
   "clinic_id": "clinic_a",
-  "sources": ["..."],
-  "latest_version": 3,
-  "versions": [
-    {
-      "version": 1,
-      "timestamp": "...",
-      "unified": ["..."],
-      "conflicts": ["..."],
-      "action": "created"
-    },
-    {
-      "version": 2,
-      "timestamp": "...",
-      "unified": ["..."],
-      "conflicts": ["..."],
-      "action": "updated"
-    }
+  "sources": [
+    [ {"meds from EMR"} ],
+    [ {"meds from Patient"} ],
+    [ {"meds from Hospital"} ]
   ]
 }
 ```
+
+**Design Choice:**
+- Sources are grouped arrays → preserves origin context
+- Each medication retains its `source` field
+
+---
+
+### 2. Canonical Normalization
+
+Incoming medical data is highly inconsistent. The system normalizes three key fields:
+
+---
+
+#### a. Medication Name Normalization
+
+Steps:
+1. Lowercasing + trimming
+2. Mapping:
+   - brand → generic (`crocin` → `paracetamol`)
+   - synonyms → canonical name
+3. Fuzzy matching (`difflib.get_close_matches`)
+   - Handles typos like `"paracetmol"`
+
+Example:
+
+| Input | Normalized |
+|---|---|
+| `"Crocin"` | `"paracetamol"` |
+| `"PCM"` | `"paracetamol"` |
+| `"paracetmol"` | `"paracetamol"` |
+
+---
+
+#### b. Dosage Normalization
+
+Uses regex:
+
+```
+(\d*\.?\d+)\s*(mg|g)?
+```
+
+Steps:
+1. Extract numeric value
+2. Convert to standard unit (`mg`)
+3. Store as string (`"500mg"`)
+
+Example:
+
+| Input | Normalized |
+|---|---|
+| `"0.5g"` | `"500mg"` |
+| `"500 mg"` | `"500mg"` |
+
+---
+
+#### c. Frequency Normalization
+
+Maps multiple formats into canonical form:
+
+| Input | Normalized |
+|---|---|
+| `"OD"`, `"daily"` | `"once daily"` |
+| `"BID"`, `"1-0-1"` | `"twice daily"` |
+| `"TID"` | `"thrice daily"` |
+
+Special handling:
+- `"stopped"` → sets `is_stopped = True`
+
+---
+
+### 3. Unified Medication Generation
+
+After normalization:
+- Medications are grouped by normalized drug name
+- Aggregated into a single unified list
+
+Each unified entry contains:
+- `name`
+- `dosage` (if consistent)
+- `frequency` (if consistent)
+- All contributing sources
+
+---
+
+### 4. Conflict Detection Logic
+
+Conflicts are detected per drug across sources.
+
+---
+
+#### 1. Dosage Mismatch
+
+**Condition:** Same drug + different dosage values
+
+```
+EMR: 500mg
+Patient: 650mg
+→ conflict
+```
+
+---
+
+#### 2. Frequency Mismatch
+
+**Condition:** Same drug + different frequency values
+
+---
+
+#### 3. Incomplete Data
+
+**Condition:** Missing dosage OR missing frequency
+
+```
+Dosage = null
+→ flagged
+```
+
+---
+
+#### 4. Duplicate Entry
+
+**Condition:** Same medication repeated within the same source
+
+---
+
+#### 5. Stopped vs Active Conflict
+
+**Condition:**
+```
+One source → stopped
+Another   → active
+```
+
+---
+
+#### 6. Blacklisted Combinations
+
+Static JSON rules define unsafe combinations:
+
+```json
+["aspirin", "ibuprofen"]
+```
+
+If both appear → `HIGH` severity conflict
+
+---
+
+### 5. Conflict Object Structure
+
+Each conflict stores:
+- `type`
+- `severity`
+- Conflicting values
+- Involved sources
+- Timestamp
+- Resolution metadata
+
+---
+
+## Versioning (Longitudinal Tracking)
+
+Instead of overwriting data, the system stores:
+
+```python
+versions = [
+  snapshot_1,
+  snapshot_2,
+  ...
+]
+```
+
+**When is a new version created?**
+
+Every reconciliation request creates a new version.
+
+**Why this design?**
+- Enables full audit trail
+- Supports time-based analysis
+- Avoids destructive updates
+
+**Snapshot contains:**
+- Unified medications
+- Detected conflicts
+- Timestamp
+- Action (`created` / `updated`)
+
+---
+
+## Conflict Resolution Logic
+
+When resolving a conflict:
+
+**Input:**
+
+```json
+{
+  "field": "dosage",
+  "corrected_value": "500mg",
+  "reason": "Doctor confirmed"
+}
+```
+
+**System actions:**
+1. Locate conflict by ID
+2. Update:
+   - `status` → `resolved`
+   - `resolved_at`
+   - `resolution_reason`
+   - `corrected_field`
+   - `corrected_value`
+
+---
+
+**Important: Unified List Update**
+
+The system propagates the correction:
+
+- If `field = dosage` → update dosage in unified meds
+- If `field = frequency` → update frequency
+- If `field = name` → rename drug
+
+**Result:**
+- Conflict is resolved
+- Unified medication reflects correction
+- Full audit preserved
+
+---
+
+## Multi-Clinic Support
+
+Each reconciliation includes:
+
+```json
+"clinic_id": "clinic_a"
+```
+
+**Purpose:**
+- Enables clinic-level analytics
+- Supports multi-tenant environments
+
+---
+
+## Reporting & Aggregation Logic
+
+All aggregations operate on the **latest version only**.
+
+---
+
+### 1. Patients with Conflicts
+
+Steps:
+1. Extract latest version
+2. Count unresolved conflicts
+3. Filter >= 1
+4. Group by patient
+
+---
+
+### 2. Conflict Summary (Time-based)
+
+Steps:
+1. Extract latest version timestamp
+2. Filter by time window (e.g., 30 days)
+3. Count conflicts per patient
+4. Group by clinic
+
+---
+
+## Robustness & Input Handling
+
+The system is designed to handle noisy real-world data.
+
+**Handles:**
+- Typos in drug names
+- Mixed units (`mg`/`g`)
+- Multiple frequency formats
+- Missing fields
+- Duplicate entries
+
+**Validation Strategy:**
+
+| Input Issue | Handling |
+|---|---|
+| Missing name | Skipped |
+| Invalid dosage | Treated as incomplete |
+| Unknown frequency | Normalized or flagged |
+| Invalid source | Rejected (schema validation) |
+
+## Data Model
+
+### Collection: `reconciliations`
+
+The core document structure is derived from the `ReconcileRequest` and versioned reconciliation output.
+
+#### ReconcileRequest (Ingestion Schema)
+
+| Field | Type | Description |
+|---|---|---|
+| `patient_id` | `string` | Unique patient identifier |
+| `clinic_id` | `string \| null` | Clinic identifier (default: `"default"`) |
+| `sources` | `array<array<Medication>>` | Grouped medication lists per source |
+
+#### MedicationBase (Per Medication Entry)
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `string` | Medication name |
+| `dosage` | `string \| null` | Dosage value (e.g., `"500mg"`) |
+| `frequency` | `string \| null` | Frequency value (e.g., `"once daily"`) |
+| `source` | `string` | Origin source label (e.g., `"EMR"`, `"patient"`) |
+
+#### ResolveRequest (Conflict Resolution Schema)
+
+| Field | Type | Description |
+|---|---|---|
+| `field` | `enum` | Field to correct — one of `"name"`, `"dosage"`, `"frequency"` |
+| `corrected_value` | `string` | The corrected value to apply |
+| `reason` | `string` | Audit reason for the resolution |
 
 ### 🔹 Conflict Structure
 
@@ -139,41 +374,55 @@ MongoDB (Versioned Documents)
 }
 ```
 
----
-
-## Indexing Strategy
-
-```js
-db.reconciliations.createIndex({ patient_id: 1 })
-db.reconciliations.createIndex({ clinic_id: 1 })
-db.reconciliations.createIndex({ "versions.timestamp": -1 })
-```
-
-**Rationale:**
-
-- Fast patient lookup
-- Efficient clinic-level aggregation
-- Time-based queries for reports
-
----
-
 ## API Endpoints
 
-### 🔹 Reconciliation
+### Health
 
-**`POST /api/v1/reconcile/`**  
-Ingest and reconcile medications
-
-**`GET /api/v1/reconcile/{patient_id}`**  
-Fetch full patient history (with versions)
+**`GET /api/v1/health/`**
+Returns service health status.
 
 ---
 
-### 🔹 Conflict Resolution
+### Medications
+
+**`POST /api/v1/medications/`**
+Create a new medication entry for a patient.
+
+Request body: `MedicationCreate`
+
+| Field | Type | Required |
+|---|---|---|
+| `name` | `string` | Yes |
+| `source` | `string` | Yes |
+| `patient_id` | `string` | Yes |
+| `dosage` | `string \| null` | No |
+| `frequency` | `string \| null` | No |
+
+**`GET /api/v1/medications/{patient_id}`**
+Fetch all medications for a given patient.
+
+---
+
+### Reconciliation
+
+**`POST /api/v1/reconcile/`**
+Ingest and reconcile medications from multiple sources.
+
+Request body: `ReconcileRequest`
+
+| Field | Type | Required |
+|---|---|---|
+| `patient_id` | `string` | Yes |
+| `sources` | `array<array<MedicationBase>>` | Yes |
+| `clinic_id` | `string \| null` | No (default: `"default"`) |
+
+**`GET /api/v1/reconcile/{patient_id}`**
+Fetch full reconciliation history (with versions) for a patient.
 
 **`PATCH /api/v1/reconcile/resolve/{reconciliation_id}/{conflict_id}`**
+Resolve a specific conflict within a reconciliation.
 
-Payload:
+Request body: `ResolveRequest`
 ```json
 {
   "field": "dosage",
@@ -182,15 +431,53 @@ Payload:
 }
 ```
 
+| Field | Type | Values |
+|---|---|---|
+| `field` | `enum` | `"name"`, `"dosage"`, `"frequency"` |
+| `corrected_value` | `string` | The corrected value to apply |
+| `reason` | `string` | Audit reason for the resolution |
+
 ---
 
-### 🔹 Reports
+### Reports
 
-**Patients with conflicts**  
-`GET /api/v1/reports/clinic/{clinic_id}/patients-with-conflicts`
+**`GET /api/v1/reports/conflicts`**
+Get a global conflict report across all patients.
 
-**Conflict summary**  
-`GET /api/v1/reports/clinic/conflict-summary?days=30&min_conflicts=2`
+| Query Param | Type | Default | Description |
+|---|---|---|---|
+| `min_conflicts` | `integer` | `1` | Minimum conflict count filter |
+| `days` | `integer \| null` | — | Lookback window in days |
+
+**`GET /api/v1/reports/clinic/{clinic_id}/patients-with-conflicts`**
+List all patients with unresolved conflicts for a given clinic.
+
+**`GET /api/v1/reports/clinic/conflict-summary`**
+Aggregated conflict summary across clinics within a time window.
+
+| Query Param | Type | Default |
+|---|---|---|
+| `days` | `integer` | `30` |
+| `min_conflicts` | `integer` | `2` |
+
+---
+
+### Patients
+
+**`GET /api/v1/patients/`**
+List all patients with pagination and sorting.
+
+| Query Param | Type | Default | Constraints |
+|---|---|---|---|
+| `limit` | `integer` | `10` | 1–100 |
+| `skip` | `integer` | `0` | >= 0 |
+| `sort_by` | `string` | `"last_updated"` | — |
+
+**`GET /api/v1/patients/{patient_id}`**
+Fetch details for a specific patient.
+
+**`GET /api/v1/patients/{patient_id}/timeline`**
+Fetch the full versioned medication timeline for a patient.
 
 ---
 
@@ -228,8 +515,8 @@ Generates:
 ## Setup Instructions
 
 ```bash
-git clone <repo>
-cd project
+git clone https://github.com/nav-jk/Medication-Reconciliation-Conflict-Reporting-Service.git
+cd Medication-Reconciliation-Conflict-Reporting-Service
 
 python -m venv venv
 venv\Scripts\activate  # Windows
@@ -246,6 +533,7 @@ uvicorn app.main:app --reload
 1. **No single source of truth**
    - Conflicts are not auto-resolved
    - Manual resolution required with audit trail
+   - Admin/user can resolve conflict with valid reason and new corrected value.
 
 2. **Versioning over mutation**
    - Every reconciliation creates a new snapshot
@@ -258,6 +546,7 @@ uvicorn app.main:app --reload
 4. **Static conflict rules**
    - JSON-based rules instead of external drug DB
    - Keeps system simple and deterministic
+   - Possible future enhancement of using a standardised ruleset.
 
 ---
 
@@ -287,7 +576,6 @@ uvicorn app.main:app --reload
 - Add real drug database (RxNorm / SNOMED)
 - Introduce authentication & roles
 - Build dashboard for clinicians
-- Add streaming updates (real-time)
 - Improve normalization (ML/NLP-based)
 - Add caching for aggregation endpoints
 
@@ -314,23 +602,9 @@ uvicorn app.main:app --reload
 
 ## Demo
 
-Include:
-- Screenshots of UI (reconciliation + conflicts)
-- OR screen recording
+A basic UI was built using AI for demo purpose.
+Demo Video can be found here []
 
----
-
-## Submission Checklist
-
-- [ ] Clean Git history
-- [ ] Working FastAPI backend
-- [ ] MongoDB schema with versioning
-- [ ] Seed script
-- [ ] Tests for core logic
-- [ ] Aggregation endpoints
-- [ ] README (this document)
-
----
 
 ## Final Note
 

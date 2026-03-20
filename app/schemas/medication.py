@@ -9,7 +9,7 @@ class MedicationBase(BaseModel):
     frequency: Optional[str] = None
     source: str
 
-    # 🔥 STRICT NAME VALIDATION
+
     @field_validator("name")
     @classmethod
     def validate_name(cls, v):
@@ -27,7 +27,7 @@ class MedicationBase(BaseModel):
 
         return v
 
-    # 🔥 STRICT DOSAGE VALIDATION
+
     @field_validator("dosage")
     @classmethod
     def validate_dosage(cls, v):
@@ -49,13 +49,13 @@ class MedicationBase(BaseModel):
         if unit == "g":
             value *= 1000
 
-        # 🔥 realistic bounds
+
         if value <= 0 or value > 5000:
             raise ValueError("Dosage out of realistic bounds")
 
         return f"{int(value)}mg"
 
-    # 🔥 STRICT FREQUENCY VALIDATION
+
     @field_validator("frequency")
     @classmethod
     def validate_frequency(cls, v):
@@ -80,7 +80,6 @@ class MedicationBase(BaseModel):
 
         return v
 
-    # 🔥 SOURCE VALIDATION (keep your mapping)
     @field_validator("source")
     @classmethod
     def validate_source(cls, v):
