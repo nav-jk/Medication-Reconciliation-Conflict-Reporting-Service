@@ -106,12 +106,12 @@ def seed():
         patient_id = f"p{i}"
         clinic_id = random.choice(CLINICS)
 
-        print(f"\n👤 Seeding {patient_id} | Clinic: {clinic_id}")
+        print(f"\n Seeding {patient_id} | Clinic: {clinic_id}")
 
         base_drugs = random.sample(DRUGS, random.randint(3, 5))
 
         for step in range(1, random.randint(2, 4)):
-            print(f"  ⏳ Step {step}")
+            print(f"   Step {step}")
 
             meds = generate_med_batch(patient_id, base_drugs)
             # 🔹 Insert medications
