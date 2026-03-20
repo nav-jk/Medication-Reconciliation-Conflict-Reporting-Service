@@ -393,19 +393,46 @@ Returns the full versioned medication timeline for a patient.
 ---
 
 ## Setup
-
+ 
+### Standard setup
+ 
+**Windows**
 ```bash
 git clone https://github.com/nav-jk/Medication-Reconciliation-Conflict-Reporting-Service.git
 cd Medication-Reconciliation-Conflict-Reporting-Service
-
+ 
 python -m venv venv
-venv\Scripts\activate  # Windows
-
+venv\Scripts\activate
+ 
 pip install -r requirements.txt
-
+ 
 uvicorn app.main:app --reload
 ```
-
+ 
+**Linux / macOS**
+```bash
+git clone https://github.com/nav-jk/Medication-Reconciliation-Conflict-Reporting-Service.git
+cd Medication-Reconciliation-Conflict-Reporting-Service
+ 
+python3 -m venv venv
+source venv/bin/activate
+ 
+pip install -r requirements.txt
+ 
+uvicorn app.main:app --reload
+```
+ 
+The API will be available at `http://localhost:8000` and the interactive docs at `http://localhost:8000/docs`.
+ 
+### Docker setup
+ 
+A `Dockerfile` is included for those who prefer a containerised setup:
+ 
+```bash
+docker build -t med-reconciliation .
+docker run -p 8000:8000 med-reconciliation
+```
+ 
 ---
 
 ## Tests
