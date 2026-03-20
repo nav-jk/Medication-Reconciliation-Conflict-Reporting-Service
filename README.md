@@ -18,86 +18,61 @@ Medication data sourced from disparate systems — EMRs, hospital discharge summ
 ```mermaid
 flowchart TB
 
-%% =========================
-%% CLIENT LAYER
-%% =========================
-subgraph CLIENT["Client Layer"]
-    A1[Frontend UI<br/>HTML / JS]
-    A2[Postman / API Clients]
+%% ── CLIENT LAYER ──
+subgraph CLIENT["🖥️  Client layer"]
+    A1["Frontend UI\nHTML / JS"]
+    A2["API clients\nPostman / scripts"]
 end
 
-%% =========================
-%% API LAYER
-%% =========================
-subgraph API["FastAPI Layer"]
-    B1[/POST /reconcile/]
-    B2[/PATCH /resolve/]
-    B3[/GET /patients/]
-    B4[/GET /reports/]
+%% ── API LAYER ──
+subgraph API["⚡  API layer — FastAPI"]
+    B1[/"POST /reconcile\nIngest sources"/]
+    B2[/"PATCH /resolve\nResolve conflict"/]
+    B3[/"GET /patients\nPatient records"/]
+    B4[/"GET /reports\nAnalytics"/]
 end
 
-%% =========================
-%% SERVICE LAYER
-%% =========================
-subgraph SERVICE["Service Layer"]
-    C1[Reconciliation Engine]
+%% ── SERVICE LAYER ──
+subgraph SERVICE["⚙️  Service layer — Reconciliation Engine"]
+    C1["Reconciliation Engine\nOrchestrates all steps"]
 
-    subgraph NORMALIZATION["Normalization Module"]
-        C2[Name Normalizer]
-        C3[Dosage Normalizer]
-        C4[Frequency Normalizer]
+    subgraph NORM["Normalisation module"]
+        C2["Name normaliser\nBrand → generic, fuzzy match"]
+        C3["Dosage normaliser\ng → mg, regex extract"]
+        C4["Frequency normaliser\nBID → twice daily"]
     end
 
-    subgraph CONFLICT["Conflict Detection Engine"]
-        C5[Dosage Conflict]
-        C6[Frequency Conflict]
-        C7[Stopped vs Active]
-        C8[Duplicate Detection]
-        C9[Blacklisted Rules]
+    subgraph CONFLICT["Conflict detection engine"]
+        C5["Dosage mismatch"]
+        C6["Frequency mismatch"]
+        C7["Stopped vs active"]
+        C8["Duplicates"]
+        C9["Blacklisted combinations"]
     end
 
-    C10[Unified Medication Builder]
+    C10["Unified med builder\nMerge, group by drug name"]
 end
 
-%% =========================
-%% VERSIONING LAYER
-%% =========================
-subgraph VERSIONING["Versioning & Audit Layer"]
-    D1[Create Snapshot]
-    D2["Append to versions[]"]
-    D3[Maintain latest_version]
+%% ── VERSIONING LAYER ──
+subgraph VERSIONING["🔒  Versioning & audit layer"]
+    D1["Create snapshot\nMeds + conflicts + timestamp"]
+    D2["Append to versions[]\nNever overwrites history"]
+    D3["Maintain latest_version\nPointer for fast reads"]
 end
 
-%% =========================
-%% REPOSITORY LAYER
-%% =========================
-subgraph REPO["Repository Layer"]
-    E1[ReconciliationRepository]
-    E2[PatientRepository]
+%% ── REPOSITORY LAYER ──
+subgraph REPO["🗄️  Repository layer"]
+    E1["ReconciliationRepository\nRead / write reconciliations"]
+    E2["PatientRepository\nPatient records CRUD"]
 end
 
-%% =========================
-%% DATABASE
-%% =========================
-subgraph DB["MongoDB"]
-    F1[(reconciliations collection<br/>versioned documents)]
-    F2[(patients collection)]
+%% ── DATABASE ──
+subgraph DB["🍃  MongoDB"]
+    F1[("reconciliations\nVersioned documents")]
+    F2[("patients\nPatient records")]
 end
 
-%% =========================
-%% REPORTING
-%% =========================
-subgraph REPORTING["Aggregation / Reporting"]
-    G1[Extract Latest Version]
-    G2[Filter by Clinic / Time]
-    G3[Conflict Counting]
-    G4[Group by Patient / Clinic]
-end
-
-%% =========================
-%% DATA FLOW
-%% =========================
-
+%% ── DATA FLOW ──
 A1 --> B1
 A2 --> B1
 A1 --> B2
@@ -110,13 +85,11 @@ B2 --> C1
 C1 --> C2
 C1 --> C3
 C1 --> C4
-
 C1 --> C5
 C1 --> C6
 C1 --> C7
 C1 --> C8
 C1 --> C9
-
 C1 --> C10
 
 C10 --> D1
@@ -126,20 +99,30 @@ D2 --> D3
 D3 --> E1
 E1 --> F1
 
-B1 --> E2
+B1 -.->|patient update| E2
 E2 --> F2
 
-F1 --> G1
-G1 --> G2
-G2 --> G3
-G3 --> G4
-G4 --> B4
-
-F1 --> E1
-E1 --> B3
+F1 -.->|reporting read| B4
+F1 -.->|patient read| B3
 B3 --> A1
 B4 --> A1
 ```
+
+### Architecture walkthrough
+
+The system is structured as six discrete layers, each with a clearly scoped responsibility.
+
+**Client layer** — requests originate from either a browser-based frontend or external API clients such as Postman. Both routes hit the same FastAPI endpoints.
+
+**API layer** — four endpoints form the public interface. `POST /reconcile` is the main ingestion point, receiving medication lists from multiple sources in a single payload. `PATCH /resolve` allows a clinician to close out a specific detected conflict. `GET /patients` and `GET /reports` serve read-only data and query MongoDB directly via the repository layer, bypassing the service and versioning layers entirely since no write-side computation is needed.
+
+**Service layer** — the reconciliation engine is the core of the system, delegating to two internal modules in parallel. The normalisation module standardises all incoming medication data — mapping brand names to generics, converting dosages to milligrams, and canonicalising frequency strings. The conflict detection engine then scans the normalised data, checking for dosage mismatches, frequency mismatches, stopped-vs-active discrepancies, within-source duplicates, and unsafe drug combinations defined by a static JSON ruleset. Once both modules complete, the unified medication builder groups results by canonical drug name and produces a single reconciled list.
+
+**Versioning & audit layer** — rather than mutating existing records, the system creates an immutable snapshot of the unified medications and all detected conflicts on every reconciliation request. Snapshots are appended to a `versions[]` array, and a `latest_version` pointer is updated to allow fast reads without scanning the entire version history.
+
+**Repository layer** — two repository classes handle all database I/O. `ReconciliationRepository` reads and writes versioned reconciliation documents; `PatientRepository` handles patient record creation and updates, which are triggered as a side effect of every `POST /reconcile` call.
+
+**MongoDB** — two collections back the system. `reconciliations` holds versioned documents whose size grows with each snapshot. `patients` holds lightweight patient records. All reporting queries operate exclusively on `latest_version` to keep read performance predictable as history accumulates.
 
 ---
 
