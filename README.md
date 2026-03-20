@@ -393,6 +393,13 @@ Returns the full versioned medication timeline for a patient.
 ---
 
 ## Setup
+### Environment Configuration
+
+Create a `.env` file in the project root by copying the example file:
+
+```bash
+cp .env.example .env
+```
  
 ### Standard setup
  
@@ -400,12 +407,6 @@ Returns the full versioned medication timeline for a patient.
 ```bash
 git clone https://github.com/nav-jk/Medication-Reconciliation-Conflict-Reporting-Service.git
 cd Medication-Reconciliation-Conflict-Reporting-Service
-### Environment Configuration
-
-Create a `.env` file in the project root by copying the example file:
-
-```bash
-cp .env.example .env
 
 python -m venv venv
 venv\Scripts\activate
