@@ -1,6 +1,7 @@
 import requests
 import random
 import os
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,43 +11,51 @@ BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 MEDICATION_URL = f"{BASE_URL}/api/v1/medications/"
 RECONCILE_URL = f"{BASE_URL}/api/v1/reconcile/"
 
-# 🔹 Realistic drug dataset
+
 DRUGS = [
-    ("Paracetamol", ["500mg", "650mg"]),
-    ("Ibuprofen", ["200mg", "400mg"]),
-    ("Diclofenac", ["50mg"]),
-    ("Metformin", ["500mg", "1000mg"]),
-    ("Atorvastatin", ["10mg", "20mg"]),
-    ("Amlodipine", ["5mg", "10mg"])
+    ("Paracetamol", ["500mg", "650mg"], ["crocin", "pcm"]),
+    ("Ibuprofen", ["200mg", "400mg"], ["brufen"]),
+    ("Diclofenac", ["50mg"], ["voveran"]),
+    ("Metformin", ["500mg", "1000mg"], ["glycomet"]),
+    ("Amlodipine", ["5mg", "10mg"], ["amlong"]),
+    ("Atorvastatin", ["10mg", "20mg"], ["atorva"]),
+    ("Aspirin", ["75mg", "150mg"], ["ecosprin"]),
+    ("Clopidogrel", ["75mg"], ["plavix"]),
+    ("Amoxicillin", ["250mg", "500mg"], ["amoxil"]),
+    ("Pantoprazole", ["20mg", "40mg"], ["pantocid"])
 ]
 
-# 🔹 Frequencies (normalized + messy)
+
 FREQUENCIES = [
-    "BID", "OD",
+    "OD", "BID", "TID",
     "once daily", "twice daily",
-    "1-0-1", "0-1-0",
+    "1-0-1", "0-1-0", "1-1-1",
+    "SOS", "PRN",
+    "HS",
     "after food",
-    "once at night",
     "stopped"
 ]
 
-# 🔹 VALID sources (IMPORTANT)
+
 SOURCES = ["EMR", "Patient", "Hospital"]
 
-# 🔹 Names
-FIRST_NAMES = ["Arjun", "Priya", "Rahul", "Anjali", "Kiran", "Sneha", "Amit"]
-LAST_NAMES = ["Nair", "Sharma", "Reddy", "Menon", "Iyer", "Gupta"]
 
-GENDERS = ["Male", "Female"]
+def messy_name(generic, brands):
+    choice = random.choice(["generic", "brand", "typo"])
 
+    if choice == "brand" and brands:
+        return random.choice(brands)
 
-def random_name():
-    return f"{random.choice(FIRST_NAMES)} {random.choice(LAST_NAMES)}"
+    if choice == "typo":
+        return generic[:max(3, len(generic)-1)]
+
+    return generic
 
 
 def random_med(patient_id, drug, conflict=None):
-    name, dosages = drug
+    name, dosages, brands = drug
 
+    med_name = messy_name(name, brands)
     dosage = random.choice(dosages)
     freq = random.choice(FREQUENCIES)
 
@@ -54,44 +63,33 @@ def random_med(patient_id, drug, conflict=None):
         dosage = random.choice([d for d in dosages if d != dosage])
 
     if conflict == "frequency":
-        freq = random.choice(["OD", "BID", "once daily"])
+        freq = random.choice(["OD", "BID", "1-0-1"])
 
     if conflict == "stopped":
         freq = "stopped"
 
     return {
         "patient_id": patient_id,
-        "name": name,
+        "name": med_name,
         "dosage": dosage,
         "frequency": freq,
         "source": random.choice(SOURCES)
     }
 
 
-def generate_patient_data(pid):
-    patient_id = f"p{pid}"
-
-    meta = {
-        "name": random_name(),
-        "age": random.randint(25, 80),
-        "gender": random.choice(GENDERS)
-    }
-
+def generate_med_batch(patient_id, base_drugs):
     meds = []
-
-    base_drugs = random.sample(DRUGS, random.randint(2, 4))
 
     for drug in base_drugs:
         meds.append(random_med(patient_id, drug))
 
-        # 🔥 introduce variation (simulate multiple sources)
         if random.random() < 0.7:
             conflict_type = random.choice(
                 ["none", "dosage", "frequency", "stopped"]
             )
             meds.append(random_med(patient_id, drug, conflict_type))
 
-    return patient_id, meta, meds
+    return meds
 
 
 def seed():
@@ -101,39 +99,47 @@ def seed():
     fail = 0
 
     for i in range(1, 16):
-        patient_id, meta, meds = generate_patient_data(i)
+        patient_id = f"p{i}"
+        print(f"\n👤 Seeding {patient_id}")
 
-        print(f"\n👤 Seeding {patient_id} ({meta['name']})")
+        base_drugs = random.sample(DRUGS, random.randint(3, 5))
 
-        # 🔹 STEP 1: Store medications
-        for med in meds:
+        # 🔥 MULTIPLE TIME STEPS (simulate history)
+        for step in range(1, random.randint(2, 4)):
+            print(f"  ⏳ Step {step}")
+
+            meds = generate_med_batch(patient_id, base_drugs)
+
+            # 🔹 Insert meds
+            for med in meds:
+                try:
+                    res = requests.post(MEDICATION_URL, json=med)
+                    if res.status_code != 200:
+                        print("  ❌ Med insert failed:", res.text)
+                        fail += 1
+                except Exception as e:
+                    print("  ❌ Exception inserting med:", e)
+                    fail += 1
+
+            # 🔹 Reconcile (creates new version)
             try:
-                res = requests.post(MEDICATION_URL, json=med)
+                res = requests.post(RECONCILE_URL, json={
+                    "patient_id": patient_id
+                })
 
-                if res.status_code != 200:
-                    print("❌ Med insert failed:", res.text)
+                if res.status_code == 200:
+                    print(f"  ✅ Reconciled (version step {step})")
+                    success += 1
+                else:
+                    print("  ❌ Reconcile failed:", res.text)
                     fail += 1
 
             except Exception as e:
-                print("❌ Exception inserting med:", e)
+                print("  ❌ Exception reconcile:", e)
                 fail += 1
 
-        # 🔹 STEP 2: Run reconciliation (from DB)
-        try:
-            res = requests.post(RECONCILE_URL, json={
-                "patient_id": patient_id
-            })
-
-            if res.status_code == 200:
-                print("✅ Reconciled")
-                success += 1
-            else:
-                print("❌ Reconcile failed:", res.text)
-                fail += 1
-
-        except Exception as e:
-            print("❌ Exception reconcile:", e)
-            fail += 1
+            # 🔥 simulate time gap (important for realism)
+            time.sleep(0.2)
 
     print("\n📊 Summary:")
     print(f"✅ Success: {success}")

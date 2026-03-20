@@ -6,57 +6,82 @@ class ReconciliationRepository:
         self.collection = db["reconciliations"]
 
     async def create(self, patient_id, sources, unified, conflicts):
-        doc = {
-            "patient_id": patient_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "sources": sources,
-            "unified": unified,
-            "conflicts": conflicts
-        }
+        existing = await self.collection.find_one({"patient_id": patient_id})
 
-        result = await self.collection.insert_one(doc)
-        return str(result.inserted_id)
+        if not existing:
+            # First version
+            doc = {
+                "patient_id": patient_id,
+                "sources": sources,
+                "latest_version": 1,
+                "versions": [
+                    {
+                        "version": 1,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "unified": unified,
+                        "conflicts": conflicts,
+                        "action": "created"
+                    }
+                ]
+            }
+            result = await self.collection.insert_one(doc)
+            return str(result.inserted_id)
 
+        else:
+            # Increment version
+            new_version = existing["latest_version"] + 1
+
+            new_entry = {
+                "version": new_version,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "unified": unified,
+                "conflicts": conflicts,
+                "action": "updated"
+            }
+
+            await self.collection.update_one(
+                {"patient_id": patient_id},
+                {
+                    "$set": {
+                        "latest_version": new_version,
+                        "sources": sources
+                    },
+                    "$push": {
+                        "versions": new_entry
+                    }
+                }
+            )
+
+            return str(existing["_id"])
 
     async def get_by_patient(self, patient_id):
         results = []
 
-        async for doc in self.collection.find({"patient_id": patient_id}).sort("timestamp", -1):
+        async for doc in self.collection.find(
+            {"patient_id": patient_id}
+        ).sort("_id", -1):
+
+            # 🔥 skip bad docs
+            if not doc.get("versions"):
+                continue
+
+            latest = doc["versions"][-1]
 
             rec = {
                 "reconciliation_id": str(doc["_id"]),
                 "patient_id": doc.get("patient_id"),
-                "timestamp": doc.get("timestamp"),
 
-                "sources": doc.get("sources", []),
+                "version": latest.get("version"),
+                "timestamp": latest.get("timestamp"),
 
-                "unified_medications": doc.get("unified", []),
-
-                "conflicts": []
+                "unified_medications": latest.get("unified", []),
+                "conflicts": latest.get("conflicts", []),
+                "history": doc.get("versions", [])
             }
 
-            #  Normalize timestamp
+            # 🔹 normalize timestamp (safety)
             if isinstance(rec["timestamp"], datetime):
                 rec["timestamp"] = rec["timestamp"].isoformat()
-
-            #  Process conflicts
-            for c in doc.get("conflicts", []):
-                rec["conflicts"].append({
-                    "id": c.get("id"),
-                    "drug": c.get("drug"),
-                    "type": c.get("type"),
-                    "severity": c.get("severity"),
-                    "status": c.get("status"),
-
-                    "values": c.get("values"),
-                    "sources": c.get("sources"),
-                    "reason": c.get("reason"),
-
-                    "resolved_at": c.get("resolved_at"),
-                    "resolution_reason": c.get("resolution_reason"),
-                    "corrected_field": c.get("corrected_field"),
-                    "corrected_value": c.get("corrected_value"),
-                })
 
             results.append(rec)
 

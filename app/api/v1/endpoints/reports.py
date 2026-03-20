@@ -16,27 +16,40 @@ async def get_conflict_report(
 ):
     collection = db["reconciliations"]
 
-    match_stage = {
-        "conflicts.status": "unresolved"
-    }
-
-    if days:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        match_stage["timestamp"] = {"$gte": cutoff.isoformat()}
-
     pipeline = [
         {
-            "$unwind": "$conflicts"
+            "$addFields": {
+                "latest": {"$arrayElemAt": ["$versions", -1]}
+            }
+        },
+        {
+            "$unwind": "$latest.conflicts"
         },
         {
             "$match": {
-                "conflicts.status": "unresolved"
+                "latest.conflicts.status": "unresolved"
             }
-        },
+        }
+    ]
+
+    if days:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        pipeline.append({
+            "$match": {
+                "latest.timestamp": {"$gte": cutoff.isoformat()}
+            }
+        })
+
+    pipeline.extend([
         {
             "$group": {
                 "_id": "$patient_id",
                 "conflict_count": {"$sum": 1}
+            }
+        },
+        {
+            "$match": {
+                "conflict_count": {"$gte": min_conflicts}
             }
         },
         {
@@ -46,11 +59,11 @@ async def get_conflict_report(
                 "conflict_count": 1
             }
         }
-    ]
+    ])
 
     results = []
     async for doc in collection.aggregate(pipeline):
-        results.append(serialize(doc))
+        results.append(doc)
 
     return {
         "filters": {
