@@ -64,7 +64,7 @@ end
 %% =========================
 subgraph VERSIONING["Versioning & Audit Layer"]
     D1[Create Snapshot]
-    D2[Append to versions[]]
+    D2["Append to versions[]"]
     D3[Maintain latest_version]
 end
 
