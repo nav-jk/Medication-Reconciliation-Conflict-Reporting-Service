@@ -5,13 +5,14 @@ class ReconciliationRepository:
     def __init__(self, db):
         self.collection = db["reconciliations"]
 
-    async def create(self, patient_id, sources, unified, conflicts):
+    async def create(self, patient_id, sources, unified, conflicts, clinic_id = "default"):
         existing = await self.collection.find_one({"patient_id": patient_id})
 
         if not existing:
             # First version
             doc = {
                 "patient_id": patient_id,
+                "clinic_id": clinic_id,
                 "sources": sources,
                 "latest_version": 1,
                 "versions": [
@@ -44,7 +45,8 @@ class ReconciliationRepository:
                 {
                     "$set": {
                         "latest_version": new_version,
-                        "sources": sources
+                        "sources": sources,
+                        "clinic_id":clinic_id
                     },
                     "$push": {
                         "versions": new_entry

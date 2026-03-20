@@ -5,4 +5,5 @@ from app.schemas.medication import MedicationBase
 
 class ReconcileRequest(BaseModel):
     patient_id: str
-    sources: Optional[List[List[MedicationBase]]] = None
+    sources: List[List[MedicationBase]]
+    clinic_id: Optional[str] = "default"    

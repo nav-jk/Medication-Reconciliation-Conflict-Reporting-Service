@@ -12,6 +12,10 @@ MEDICATION_URL = f"{BASE_URL}/api/v1/medications/"
 RECONCILE_URL = f"{BASE_URL}/api/v1/reconcile/"
 
 
+# 🔥 Clinics
+CLINICS = ["clinic_a", "clinic_b", "clinic_c"]
+
+
 DRUGS = [
     ("Paracetamol", ["500mg", "650mg"], ["crocin", "pcm"]),
     ("Ibuprofen", ["200mg", "400mg"], ["brufen"]),
@@ -100,17 +104,19 @@ def seed():
 
     for i in range(1, 16):
         patient_id = f"p{i}"
-        print(f"\n👤 Seeding {patient_id}")
+        clinic_id = random.choice(CLINICS)
+
+        print(f"\n👤 Seeding {patient_id} | Clinic: {clinic_id}")
 
         base_drugs = random.sample(DRUGS, random.randint(3, 5))
 
-        # 🔥 MULTIPLE TIME STEPS (simulate history)
+        # 🔥 MULTIPLE TIME STEPS (versioning)
         for step in range(1, random.randint(2, 4)):
             print(f"  ⏳ Step {step}")
 
             meds = generate_med_batch(patient_id, base_drugs)
 
-            # 🔹 Insert meds
+            # 🔹 Insert medications
             for med in meds:
                 try:
                     res = requests.post(MEDICATION_URL, json=med)
@@ -121,14 +127,28 @@ def seed():
                     print("  ❌ Exception inserting med:", e)
                     fail += 1
 
-            # 🔹 Reconcile (creates new version)
+            # 🔹 Group meds into sources for reconciliation
+            source_map = {}
+            for m in meds:
+                source_map.setdefault(m["source"], []).append({
+                    "name": m["name"],
+                    "dosage": m["dosage"],
+                    "frequency": m["frequency"],
+                    "source": m["source"]
+                })
+
+            sources_payload = list(source_map.values())
+
+            # 🔹 Reconcile with clinic_id
             try:
                 res = requests.post(RECONCILE_URL, json={
-                    "patient_id": patient_id
+                    "patient_id": patient_id,
+                    "clinic_id": clinic_id,
+                    "sources": sources_payload
                 })
 
                 if res.status_code == 200:
-                    print(f"  ✅ Reconciled (version step {step})")
+                    print(f"  ✅ Reconciled (version {step})")
                     success += 1
                 else:
                     print("  ❌ Reconcile failed:", res.text)
@@ -138,7 +158,6 @@ def seed():
                 print("  ❌ Exception reconcile:", e)
                 fail += 1
 
-            # 🔥 simulate time gap (important for realism)
             time.sleep(0.2)
 
     print("\n📊 Summary:")

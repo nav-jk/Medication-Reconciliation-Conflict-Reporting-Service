@@ -87,8 +87,9 @@ async def reconcile(payload: ReconcileRequest, db=Depends(get_db)):
         rec_id = await repo.create(
             payload.patient_id,
             sources_dict,
-            unified_dict,
-            conflicts_dict
+            unified,
+            conflicts,
+            payload.clinic_id   # 🔥 NEW
         )
     except Exception as e:
         print("❌ DB insert failed:", str(e))
