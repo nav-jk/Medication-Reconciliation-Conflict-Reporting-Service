@@ -15,8 +15,7 @@ Medication data sourced from disparate systems — EMRs, hospital discharge summ
 
 ## Architecture
 
-![Architecture](./images/diagram-export-3-20-2026-8_48_31-PM.png)
-
+![Architecture Diagram](images/diagram-export-3-20-2026-8_48_31-PM.png)
 
 ### Architecture walkthrough
 
@@ -24,7 +23,7 @@ The system is structured as six discrete layers, each with a clearly scoped resp
 
 **Client layer** — requests originate from either a browser-based frontend or external API clients such as Postman. Both routes hit the same FastAPI endpoints.
 
-**API layer** — four endpoints form the public interface. `POST /reconcile` is the main ingestion point, receiving medication lists from multiple sources in a single payload. `PATCH /resolve` allows a clinician to close out a specific detected conflict. `GET /patients` and `GET /reports` serve read-only data and query MongoDB directly via the repository layer, bypassing the service and versioning layers entirely since no write-side computation is needed.
+**API layer** — four major endpoints and other helper api's form the public interface . `POST /reconcile` is the main ingestion point, receiving medication lists from multiple sources in a single payload. `PATCH /resolve` allows a clinician to close out a specific detected conflict. `GET /patients` and `GET /reports` serve read-only data and query MongoDB directly via the repository layer, bypassing the service and versioning layers entirely since no write-side computation is needed.
 
 **Service layer** — the reconciliation engine is the core of the system, delegating to two internal modules in parallel. The normalisation module standardises all incoming medication data — mapping brand names to generics, converting dosages to milligrams, and canonicalising frequency strings. The conflict detection engine then scans the normalised data, checking for dosage mismatches, frequency mismatches, stopped-vs-active discrepancies, within-source duplicates, and unsafe drug combinations defined by a static JSON ruleset. Once both modules complete, the unified medication builder groups results by canonical drug name and produces a single reconciled list.
 
@@ -269,6 +268,26 @@ The system is designed to tolerate the kinds of noisy, inconsistent data encount
 | `corrected_value` | `string` | The corrected value to apply |
 | `reason` | `string` | Audit reason for the resolution |
 
+### Indexing
+
+> **Note:** Indexes are created automatically on startup via the `lifespan` handler — no manual setup required.
+
+Four indexes are defined on the `reconciliations` collection:
+
+| Index | Rationale |
+|---|---|
+| `patient_id` | Primary lookup key — every reconciliation query is scoped to a patient |
+| `clinic_id` | Required for all clinic-level aggregation and reporting queries |
+| `versions.timestamp` | Enables efficient time-window filtering in conflict summary reports |
+| `versions.conflicts.status` | Speeds up filtering of unresolved conflicts without scanning full version arrays |
+
+```python
+await collection.create_index("patient_id")
+await collection.create_index("clinic_id")
+await collection.create_index("versions.timestamp")
+await collection.create_index("versions.conflicts.status")
+```
+
 ---
 
 ## API Reference
@@ -451,39 +470,40 @@ Generates 10–20 patients with multiple reconciliation versions per patient, us
 - Add caching for aggregation endpoints to improve performance at scale
 
 ---
+
 ## AI Usage
- 
+
 AI assistance was used for the following:
- 
+
 - FastAPI boilerplate scaffolding and project structure
 - Debugging aggregation pipeline issues
 - Structuring initial test cases
 - Building a mock frontend for demo and visualisation purposes
- 
+
 All aggregation pipelines, data model decisions, and conflict resolution logic were manually reviewed and refined.
- 
+
 **Where I disagreed with the AI:** the AI initially suggested a flat schema for storing conflict data. This was rejected in favour of versioned snapshots — a flat schema would have made longitudinal tracking impractical and would not have preserved the medical history in a way that reflects how conflicts actually evolve over time.
- 
+
 ---
 
 ## Demo
- 
+
 A full video walkthrough is available here: [Demo Video](https://youtu.be/Gu7W0fLqTf0)
- 
+
 The recording covers the following flows in order:
- 
+
 **1. Data seeding** — the seed script is executed, populating MongoDB with 10–20 synthetic patients across multiple clinics, each with varied conflict scenarios including dosage mismatches, stopped-vs-active discrepancies, and blacklisted combinations.
- 
+
 **2. API walkthrough (FastAPI docs)** — the interactive FastAPI documentation is used to demonstrate the following endpoints live:
- 
+
 - `GET /api/v1/reconcile/{patient_id}` — retrieving a full reconciliation record with its complete version history
 - `GET /api/v1/reports/conflicts` — global conflict report filtered across all patients
 - `GET /api/v1/reports/clinic/{clinic_id}/patients-with-conflicts` — listing patients with unresolved conflicts for a given clinic
 - `GET /api/v1/reports/clinic/conflict-summary` — aggregated conflict counts per clinic within a 30-day window
 - `GET /api/v1/patients/{patient_id}/timeline` — full versioned medication timeline for a single patient
- 
+
 **3. Frontend walkthrough** — a mock frontend (AI-generated for demo purposes) is used to walk through the same features via a UI, demonstrating conflict detection, patient timelines, and clinic-level reporting in context.
- 
+
 ---
 
 ## Final Note
