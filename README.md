@@ -1,20 +1,21 @@
 # Medication Reconciliation & Conflict Reporting Service
 
+A **Medication Reconciliation & Conflict Reporting Service** designed for chronic-care workflows, with a primary focus on dialysis patients.
 
-This project implements a **Medication Reconciliation & Conflict Reporting Service** designed for chronic-care workflows (e.g., dialysis patients).
+Medication data sourced from disparate systems — EMRs, hospital discharge summaries, and patient-reported records — frequently contains inconsistencies and conflicts. This service addresses that problem end-to-end by:
 
-Different sources (EMR, hospital discharge, patient-reported) often provide conflicting medication data. This system:
-
-- Ingests medication lists from multiple sources
-- Normalizes and reconciles them into a unified view
-- Detects conflicts across sources
-- Maintains versioned history (longitudinal snapshots)
-- Allows conflict resolution with audit trail
-- Provides clinic-level analytics and reporting
+- Ingesting medication lists from multiple sources
+- Normalizing and reconciling them into a unified view
+- Detecting and categorizing conflicts across sources
+- Maintaining a versioned longitudinal history with full snapshot support
+- Enabling conflict resolution with a complete audit trail
+- Providing clinic-level analytics and aggregated reporting
 
 ---
-### Architecture
 
+## Architecture
+
+```mermaid
 flowchart TB
 
 %% =========================
@@ -97,407 +98,170 @@ end
 %% DATA FLOW
 %% =========================
 
-%% Client to API
 A1 --> B1
 A2 --> B1
 A1 --> B2
 A1 --> B3
 A1 --> B4
 
-%% API to Service
 B1 --> C1
 B2 --> C1
 
-%% Normalization flow
 C1 --> C2
 C1 --> C3
 C1 --> C4
 
-%% Conflict detection
 C1 --> C5
 C1 --> C6
 C1 --> C7
 C1 --> C8
 C1 --> C9
 
-%% Build unified meds
 C1 --> C10
 
-%% Versioning
 C10 --> D1
 D1 --> D2
 D2 --> D3
 
-%% Repository
 D3 --> E1
 E1 --> F1
 
-%% Patient updates
 B1 --> E2
 E2 --> F2
 
-%% Reporting flow
 F1 --> G1
 G1 --> G2
 G2 --> G3
 G3 --> G4
 G4 --> B4
 
-%% Read back to client
 F1 --> E1
 E1 --> B3
 B3 --> A1
 B4 --> A1
-
-# Key Features — Detailed Logic & System Behavior
-
-This section explains how the system actually works internally, including normalization, conflict detection, and data handling.
-The goal is to make the system understandable even without running it.
+```
 
 ---
 
-## Core Functionality (Detailed)
+## Core Functionality
 
 ### 1. Multi-Source Medication Ingestion
 
-Each request contains:
+Each reconciliation request carries medication data grouped by source, preserving its origin context throughout the pipeline.
 
 ```json
 {
   "patient_id": "p1",
   "clinic_id": "clinic_a",
   "sources": [
-    [ {"meds from EMR"} ],
-    [ {"meds from Patient"} ],
-    [ {"meds from Hospital"} ]
+    [{ "meds from EMR" }],
+    [{ "meds from Patient" }],
+    [{ "meds from Hospital" }]
   ]
 }
 ```
 
-**Design Choice:**
-- Sources are grouped arrays → preserves origin context
-- Each medication retains its `source` field
+Each medication entry retains its `source` field, ensuring traceability back to the originating system.
 
 ---
 
 ### 2. Canonical Normalization
 
-Incoming medical data is highly inconsistent. The system normalizes three key fields:
-
----
+Incoming medical data is inherently inconsistent. The system normalizes three key fields to bring all inputs into a canonical form before reconciliation.
 
 #### a. Medication Name Normalization
 
-Steps:
-1. Lowercasing + trimming
-2. Mapping:
-   - brand → generic (`crocin` → `paracetamol`)
-   - synonyms → canonical name
-3. Fuzzy matching (`difflib.get_close_matches`)
-   - Handles typos like `"paracetmol"`
+The normalization pipeline applies the following steps in order:
 
-Example:
+1. Lowercasing and trimming of whitespace
+2. Brand-to-generic and synonym mapping (e.g., `crocin` → `paracetamol`)
+3. Fuzzy matching via `difflib.get_close_matches` to handle common typos
 
-| Input | Normalized |
+| Input | Normalized Output |
 |---|---|
 | `"Crocin"` | `"paracetamol"` |
 | `"PCM"` | `"paracetamol"` |
 | `"paracetmol"` | `"paracetamol"` |
 
----
-
 #### b. Dosage Normalization
 
-Uses regex:
+Dosages are extracted using the following regex pattern and standardized to milligrams:
 
 ```
 (\d*\.?\d+)\s*(mg|g)?
 ```
 
-Steps:
-1. Extract numeric value
-2. Convert to standard unit (`mg`)
-3. Store as string (`"500mg"`)
-
-Example:
-
-| Input | Normalized |
+| Input | Normalized Output |
 |---|---|
 | `"0.5g"` | `"500mg"` |
 | `"500 mg"` | `"500mg"` |
 
----
-
 #### c. Frequency Normalization
 
-Maps multiple formats into canonical form:
+Multiple input formats are mapped to a canonical frequency label:
 
-| Input | Normalized |
+| Input | Normalized Output |
 |---|---|
 | `"OD"`, `"daily"` | `"once daily"` |
 | `"BID"`, `"1-0-1"` | `"twice daily"` |
 | `"TID"` | `"thrice daily"` |
 
-Special handling:
-- `"stopped"` → sets `is_stopped = True`
+> **Note:** The value `"stopped"` sets `is_stopped = True` on the medication entry.
 
 ---
 
 ### 3. Unified Medication Generation
 
-After normalization:
-- Medications are grouped by normalized drug name
-- Aggregated into a single unified list
-
-Each unified entry contains:
-- `name`
-- `dosage` (if consistent)
-- `frequency` (if consistent)
-- All contributing sources
+After normalization, medications are grouped by their canonical drug name and aggregated into a single unified list. Each entry in the unified list includes the normalized name, dosage (if consistent across sources), frequency (if consistent), and all contributing sources.
 
 ---
 
-### 4. Conflict Detection Logic
+### 4. Conflict Detection
 
-Conflicts are detected per drug across sources.
+Conflicts are detected on a per-drug basis across all contributing sources.
 
----
-
-#### 1. Dosage Mismatch
-
-**Condition:** Same drug + different dosage values
+#### Dosage Mismatch
+Triggered when the same drug appears with differing dosage values across sources.
 
 ```
-EMR: 500mg
+EMR:     500mg
 Patient: 650mg
-→ conflict
+→ DOSAGE_MISMATCH conflict
 ```
 
----
+#### Frequency Mismatch
+Triggered when the same drug is prescribed at different frequencies across sources.
 
-#### 2. Frequency Mismatch
-
-**Condition:** Same drug + different frequency values
-
----
-
-#### 3. Incomplete Data
-
-**Condition:** Missing dosage OR missing frequency
+#### Incomplete Data
+Triggered when a medication entry is missing a dosage or frequency value.
 
 ```
-Dosage = null
-→ flagged
+dosage = null → flagged as incomplete
 ```
 
----
+#### Duplicate Entry
+Triggered when the same medication appears more than once within a single source.
 
-#### 4. Duplicate Entry
+#### Stopped vs. Active Conflict
+Triggered when one source records a medication as stopped while another records it as active.
 
-**Condition:** Same medication repeated within the same source
-
----
-
-#### 5. Stopped vs Active Conflict
-
-**Condition:**
-```
-One source → stopped
-Another   → active
-```
-
----
-
-#### 6. Blacklisted Combinations
-
-Static JSON rules define unsafe combinations:
+#### Blacklisted Combinations
+A static JSON ruleset defines known unsafe drug combinations. If both drugs in a blacklisted pair are present in the unified list, a `HIGH` severity conflict is raised.
 
 ```json
 ["aspirin", "ibuprofen"]
 ```
 
-If both appear → `HIGH` severity conflict
-
 ---
 
 ### 5. Conflict Object Structure
 
-Each conflict stores:
-- `type`
-- `severity`
-- Conflicting values
-- Involved sources
-- Timestamp
-- Resolution metadata
-
----
-
-## Versioning (Longitudinal Tracking)
-
-Instead of overwriting data, the system stores:
-
-```python
-versions = [
-  snapshot_1,
-  snapshot_2,
-  ...
-]
-```
-
-**When is a new version created?**
-
-Every reconciliation request creates a new version.
-
-**Why this design?**
-- Enables full audit trail
-- Supports time-based analysis
-- Avoids destructive updates
-
-**Snapshot contains:**
-- Unified medications
-- Detected conflicts
-- Timestamp
-- Action (`created` / `updated`)
-
----
-
-## Conflict Resolution Logic
-
-When resolving a conflict:
-
-**Input:**
-
-```json
-{
-  "field": "dosage",
-  "corrected_value": "500mg",
-  "reason": "Doctor confirmed"
-}
-```
-
-**System actions:**
-1. Locate conflict by ID
-2. Update:
-   - `status` → `resolved`
-   - `resolved_at`
-   - `resolution_reason`
-   - `corrected_field`
-   - `corrected_value`
-
----
-
-**Important: Unified List Update**
-
-The system propagates the correction:
-
-- If `field = dosage` → update dosage in unified meds
-- If `field = frequency` → update frequency
-- If `field = name` → rename drug
-
-**Result:**
-- Conflict is resolved
-- Unified medication reflects correction
-- Full audit preserved
-
----
-
-## Multi-Clinic Support
-
-Each reconciliation includes:
-
-```json
-"clinic_id": "clinic_a"
-```
-
-**Purpose:**
-- Enables clinic-level analytics
-- Supports multi-tenant environments
-
----
-
-## Reporting & Aggregation Logic
-
-All aggregations operate on the **latest version only**.
-
----
-
-### 1. Patients with Conflicts
-
-Steps:
-1. Extract latest version
-2. Count unresolved conflicts
-3. Filter >= 1
-4. Group by patient
-
----
-
-### 2. Conflict Summary (Time-based)
-
-Steps:
-1. Extract latest version timestamp
-2. Filter by time window (e.g., 30 days)
-3. Count conflicts per patient
-4. Group by clinic
-
----
-
-## Robustness & Input Handling
-
-The system is designed to handle noisy real-world data.
-
-**Handles:**
-- Typos in drug names
-- Mixed units (`mg`/`g`)
-- Multiple frequency formats
-- Missing fields
-- Duplicate entries
-
-**Validation Strategy:**
-
-| Input Issue | Handling |
-|---|---|
-| Missing name | Skipped |
-| Invalid dosage | Treated as incomplete |
-| Unknown frequency | Normalized or flagged |
-| Invalid source | Rejected (schema validation) |
-
-## Data Model
-
-### Collection: `reconciliations`
-
-The core document structure is derived from the `ReconcileRequest` and versioned reconciliation output.
-
-#### ReconcileRequest (Ingestion Schema)
-
-| Field | Type | Description |
-|---|---|---|
-| `patient_id` | `string` | Unique patient identifier |
-| `clinic_id` | `string \| null` | Clinic identifier (default: `"default"`) |
-| `sources` | `array<array<Medication>>` | Grouped medication lists per source |
-
-#### MedicationBase (Per Medication Entry)
-
-| Field | Type | Description |
-|---|---|---|
-| `name` | `string` | Medication name |
-| `dosage` | `string \| null` | Dosage value (e.g., `"500mg"`) |
-| `frequency` | `string \| null` | Frequency value (e.g., `"once daily"`) |
-| `source` | `string` | Origin source label (e.g., `"EMR"`, `"patient"`) |
-
-#### ResolveRequest (Conflict Resolution Schema)
-
-| Field | Type | Description |
-|---|---|---|
-| `field` | `enum` | Field to correct — one of `"name"`, `"dosage"`, `"frequency"` |
-| `corrected_value` | `string` | The corrected value to apply |
-| `reason` | `string` | Audit reason for the resolution |
-
-### 🔹 Conflict Structure
+Each conflict record stores the following fields:
 
 ```json
 {
   "id": "uuid",
-  "drug": "Paracetamol",
+  "drug": "paracetamol",
   "type": "DOSAGE_MISMATCH",
   "severity": "HIGH",
   "values": ["500mg", "650mg"],
@@ -509,7 +273,112 @@ The core document structure is derived from the `ReconcileRequest` and versioned
 }
 ```
 
-## API Endpoints
+---
+
+## Versioning & Longitudinal Tracking
+
+Rather than overwriting existing records, the system appends a new snapshot to a `versions` array on every reconciliation request:
+
+```python
+versions = [
+    snapshot_1,
+    snapshot_2,
+    ...
+]
+```
+
+Each snapshot contains the unified medication list, all detected conflicts, a timestamp, and an action label (`created` or `updated`). This design supports full audit trails, time-based analysis, and prevents destructive updates to historical data.
+
+---
+
+## Conflict Resolution
+
+When a clinician resolves a conflict, the following payload is submitted:
+
+```json
+{
+  "field": "dosage",
+  "corrected_value": "500mg",
+  "reason": "Doctor confirmed"
+}
+```
+
+The system then:
+
+1. Locates the conflict by ID
+2. Updates its status to `resolved`, along with `resolved_at`, `resolution_reason`, `corrected_field`, and `corrected_value`
+3. Propagates the correction to the unified medication list:
+   - `field = dosage` → updates dosage on the relevant unified entry
+   - `field = frequency` → updates frequency
+   - `field = name` → renames the drug entry
+
+The conflict is marked resolved, the unified list reflects the correction, and the full audit history is preserved.
+
+---
+
+## Multi-Clinic Support
+
+Each reconciliation request includes a `clinic_id` field, enabling clinic-level analytics and supporting multi-tenant deployments.
+
+---
+
+## Reporting & Aggregation
+
+All aggregation operations are performed against the **latest version** of each reconciliation document.
+
+### Patients with Conflicts
+Extracts the latest version for each patient, counts unresolved conflicts, and returns all patients with one or more.
+
+### Conflict Summary (Time-based)
+Filters records by the latest version timestamp within a configurable time window (e.g., 30 days), counts conflicts per patient, and groups results by clinic.
+
+---
+
+## Robustness & Input Handling
+
+The system is designed to tolerate the kinds of noisy, inconsistent data encountered in real-world clinical environments.
+
+| Input Issue | Handling |
+|---|---|
+| Missing medication name | Entry is skipped |
+| Invalid dosage format | Treated as incomplete |
+| Unrecognized frequency | Normalized where possible; flagged otherwise |
+| Invalid source structure | Rejected via schema validation |
+
+---
+
+## Data Model
+
+### Collection: `reconciliations`
+
+#### ReconcileRequest
+
+| Field | Type | Description |
+|---|---|---|
+| `patient_id` | `string` | Unique patient identifier |
+| `clinic_id` | `string \| null` | Clinic identifier (default: `"default"`) |
+| `sources` | `array<array<Medication>>` | Grouped medication lists, one array per source |
+
+#### MedicationBase
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `string` | Medication name |
+| `dosage` | `string \| null` | Dosage value (e.g., `"500mg"`) |
+| `frequency` | `string \| null` | Frequency value (e.g., `"once daily"`) |
+| `source` | `string` | Origin source label (e.g., `"EMR"`, `"patient"`) |
+
+#### ResolveRequest
+
+| Field | Type | Description |
+|---|---|---|
+| `field` | `enum` | Field to correct — one of `"name"`, `"dosage"`, `"frequency"` |
+| `corrected_value` | `string` | The corrected value to apply |
+| `reason` | `string` | Audit reason for the resolution |
+
+---
+
+## API Reference
 
 ### Health
 
@@ -521,9 +390,7 @@ Returns service health status.
 ### Medications
 
 **`POST /api/v1/medications/`**
-Create a new medication entry for a patient.
-
-Request body: `MedicationCreate`
+Creates a new medication entry for a patient.
 
 | Field | Type | Required |
 |---|---|---|
@@ -534,16 +401,14 @@ Request body: `MedicationCreate`
 | `frequency` | `string \| null` | No |
 
 **`GET /api/v1/medications/{patient_id}`**
-Fetch all medications for a given patient.
+Returns all medications for a given patient.
 
 ---
 
 ### Reconciliation
 
 **`POST /api/v1/reconcile/`**
-Ingest and reconcile medications from multiple sources.
-
-Request body: `ReconcileRequest`
+Ingests and reconciles medications from multiple sources.
 
 | Field | Type | Required |
 |---|---|---|
@@ -552,12 +417,11 @@ Request body: `ReconcileRequest`
 | `clinic_id` | `string \| null` | No (default: `"default"`) |
 
 **`GET /api/v1/reconcile/{patient_id}`**
-Fetch full reconciliation history (with versions) for a patient.
+Returns the full reconciliation history (all versions) for a patient.
 
 **`PATCH /api/v1/reconcile/resolve/{reconciliation_id}/{conflict_id}`**
-Resolve a specific conflict within a reconciliation.
+Resolves a specific conflict within a reconciliation.
 
-Request body: `ResolveRequest`
 ```json
 {
   "field": "dosage",
@@ -577,20 +441,20 @@ Request body: `ResolveRequest`
 ### Reports
 
 **`GET /api/v1/reports/conflicts`**
-Get a global conflict report across all patients.
+Returns a global conflict report across all patients.
 
-| Query Param | Type | Default | Description |
+| Query Parameter | Type | Default | Description |
 |---|---|---|---|
 | `min_conflicts` | `integer` | `1` | Minimum conflict count filter |
 | `days` | `integer \| null` | — | Lookback window in days |
 
 **`GET /api/v1/reports/clinic/{clinic_id}/patients-with-conflicts`**
-List all patients with unresolved conflicts for a given clinic.
+Lists all patients with unresolved conflicts for a given clinic.
 
 **`GET /api/v1/reports/clinic/conflict-summary`**
-Aggregated conflict summary across clinics within a time window.
+Returns an aggregated conflict summary across clinics within a time window.
 
-| Query Param | Type | Default |
+| Query Parameter | Type | Default |
 |---|---|---|
 | `days` | `integer` | `30` |
 | `min_conflicts` | `integer` | `2` |
@@ -600,54 +464,23 @@ Aggregated conflict summary across clinics within a time window.
 ### Patients
 
 **`GET /api/v1/patients/`**
-List all patients with pagination and sorting.
+Lists all patients with pagination and sorting.
 
-| Query Param | Type | Default | Constraints |
+| Query Parameter | Type | Default | Constraints |
 |---|---|---|---|
 | `limit` | `integer` | `10` | 1–100 |
 | `skip` | `integer` | `0` | >= 0 |
 | `sort_by` | `string` | `"last_updated"` | — |
 
 **`GET /api/v1/patients/{patient_id}`**
-Fetch details for a specific patient.
+Returns details for a specific patient.
 
 **`GET /api/v1/patients/{patient_id}/timeline`**
-Fetch the full versioned medication timeline for a patient.
+Returns the full versioned medication timeline for a patient.
 
 ---
 
-## Tests
-
-```bash
-pytest -v
-```
-
-Coverage includes:
-
-- Reconciliation logic
-- Conflict detection
-- Versioning behavior
-- Conflict resolution updates
-- Aggregation endpoints
-
----
-
-## Seed Script
-
-```bash
-python scripts/seed_data.py
-```
-
-Generates:
-
-- 10–20 patients
-- Multiple versions per patient
-- Realistic noisy data
-- Forced conflicts (dosage/frequency/stopped)
-
----
-
-## Setup Instructions
+## Setup
 
 ```bash
 git clone https://github.com/nav-jk/Medication-Reconciliation-Conflict-Reporting-Service.git
@@ -663,25 +496,35 @@ uvicorn app.main:app --reload
 
 ---
 
-## Assumptions & Design Decisions
+## Tests
 
-1. **No single source of truth**
-   - Conflicts are not auto-resolved
-   - Manual resolution required with audit trail
-   - Admin/user can resolve conflict with valid reason and new corrected value.
+```bash
+pytest -v
+```
 
-2. **Versioning over mutation**
-   - Every reconciliation creates a new snapshot
-   - Enables full history tracking
+Test coverage includes reconciliation logic, conflict detection, versioning behavior, conflict resolution propagation, and aggregation endpoints.
 
-3. **Denormalized structure**
-   - Faster reads for aggregation
-   - Trade-off: duplication across versions
+---
 
-4. **Static conflict rules**
-   - JSON-based rules instead of external drug DB
-   - Keeps system simple and deterministic
-   - Possible future enhancement of using a standardised ruleset.
+## Seed Script
+
+```bash
+python scripts/seed_data.py
+```
+
+Generates 10–20 patients with multiple reconciliation versions per patient, using realistic noisy data with forced conflicts across dosage, frequency, and stopped-vs-active scenarios.
+
+---
+
+## Design Decisions & Assumptions
+
+1. **No automatic conflict resolution.** Conflicts are never auto-resolved. All resolutions require a human decision with a documented reason, preserving clinical accountability.
+
+2. **Versioning over mutation.** Every reconciliation request creates a new snapshot rather than overwriting the previous state, enabling complete longitudinal history.
+
+3. **Denormalized document structure.** Optimized for read performance during aggregation, at the cost of some duplication across versions.
+
+4. **Static conflict rules.** Drug interaction rules are defined in a static JSON file rather than integrated with an external database. This keeps the system self-contained and deterministic, while leaving room for future enhancement with a standardized ruleset such as RxNorm.
 
 ---
 
@@ -689,63 +532,47 @@ uvicorn app.main:app --reload
 
 | Decision | Trade-off |
 |---|---|
-| Versioned documents | Larger document size |
-| Denormalization | Data duplication |
-| No external drug DB | Limited clinical accuracy |
-| Simple normalization | Some edge cases missed |
+| Versioned documents | Larger document size over time |
+| Denormalized structure | Data duplication across versions |
+| No external drug database | Limited clinical accuracy for drug interactions |
+| Rule-based normalization | Some edge cases in drug naming may be missed |
 
 ---
 
 ## Known Limitations
 
-- No authentication / authorization
-- Limited drug normalization (basic fuzzy matching)
-- No real drug interaction database
-- No pagination for large datasets
-- Conflict severity is heuristic
+- No authentication or authorization layer
+- Drug normalization relies on basic fuzzy matching; does not handle all real-world name variants
+- No integration with a clinical drug interaction database
+- No pagination on large result sets in all endpoints
+- Conflict severity is heuristic rather than clinically validated
 
 ---
 
-## What I Would Do Next
+## Potential Next Steps
 
-- Add real drug database (RxNorm / SNOMED)
-- Introduce authentication & roles
-- Build dashboard for clinicians
-- Improve normalization (ML/NLP-based)
-- Add caching for aggregation endpoints
+- Integrate a standardized drug database (RxNorm / SNOMED CT)
+- Add authentication, role-based access control, and session management
+- Build a clinician-facing dashboard for conflict review and resolution
+- Improve normalization using NLP or ML-based entity recognition
+- Add caching for aggregation endpoints to improve performance at scale
 
 ---
 
 ## AI Usage
 
-**Used for:**
-- Boilerplate FastAPI setup
-- Debugging aggregation issues
-- Structuring test cases
+AI assistance was used for FastAPI boilerplate scaffolding, debugging aggregation pipeline issues, and structuring initial test cases. All aggregation pipelines, data model decisions, and conflict resolution logic were manually reviewed and refined.
 
-**Manually reviewed:**
-- Aggregation pipelines
-- Data model decisions
-- Conflict resolution logic
-
-**Disagreement example:**
-
-> AI initially suggested using flat schema for conflicts.  
-> I rejected this and implemented versioned snapshots, as it better models real-world medical history.
+One notable point of disagreement: the AI initially suggested a flat schema for storing conflict data. This was rejected in favour of versioned snapshots, which more accurately models real-world medical history and supports the longitudinal tracking requirements of the system.
 
 ---
 
 ## Demo
 
-A basic UI was built using AI for demo purpose.
-Demo Video can be found here []
+A basic UI was built for demonstration purposes. A demo video can be found here: *(link pending)*
 
+---
 
 ## Final Note
 
-This system is designed with real-world healthcare data challenges in mind:
-- inconsistent inputs
-- lack of ground truth
-- need for auditability
-
-The focus was on **clarity**, **extensibility**, and **robustness**, rather than over-engineering.
+This system is designed with the realities of clinical data in mind — inconsistent inputs, absence of a single source of truth, and a strong need for auditability. The design prioritizes clarity, extensibility, and robustness over complexity.
