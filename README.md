@@ -400,7 +400,13 @@ Returns the full versioned medication timeline for a patient.
 ```bash
 git clone https://github.com/nav-jk/Medication-Reconciliation-Conflict-Reporting-Service.git
 cd Medication-Reconciliation-Conflict-Reporting-Service
- 
+### Environment Configuration
+
+Create a `.env` file in the project root by copying the example file:
+
+```bash
+cp .env.example .env
+
 python -m venv venv
 venv\Scripts\activate
  
@@ -422,16 +428,18 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
  
-The API will be available at `http://localhost:8000` and the interactive docs at `http://localhost:8000/docs`.
+The API will be available at `http://localhost:8000` and the interactive docs at `http://localhost:8000/docs`. Ensure MongoDB is running and your `.env` file is configured before starting.
  
 ### Docker setup
  
-A `Dockerfile` is included for those who prefer a containerised setup:
+A `Dockerfile` and `docker-compose.yml` are included for those who prefer a containerised setup. This is the recommended approach as it also starts MongoDB automatically:
  
 ```bash
-docker build -t med-reconciliation .
-docker run -p 8000:8000 med-reconciliation
+docker compose up --build
 ```
+ 
+The API will be available at `http://localhost:8000` and MongoDB at `localhost:27017`.
+
  
 ---
 
