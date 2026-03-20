@@ -9,16 +9,25 @@ class PatientRepository:
     async def upsert_patient(self, patient_id: str):
         now = datetime.now(timezone.utc).isoformat()
 
-        await self.collection.update_one(
-            {"patient_id": patient_id},
-            {
-                "$set": {"last_updated": now},
-                "$setOnInsert": {
-                    "patient_id": patient_id,
-                    "created_at": now,
-                    "total_reconciliations": 0
-                },
-                "$inc": {"total_reconciliations": 1}
-            },
-            upsert=True
-        )
+        # 🔹 Step 1: Check if patient exists
+        existing = await self.collection.find_one({"patient_id": patient_id})
+
+        if existing:
+            # 🔥 Update existing patient
+            result = await self.collection.update_one(
+                {"patient_id": patient_id},
+                {
+                    "$set": {"last_updated": now},
+                    "$inc": {"total_reconciliations": 1}
+                }
+            )
+        else:
+            # 🔥 Insert new patient
+            result = await self.collection.insert_one({
+                "patient_id": patient_id,
+                "created_at": now,
+                "last_updated": now,
+                "total_reconciliations": 1
+            })
+
+        print("📦 Patient write result:", result)

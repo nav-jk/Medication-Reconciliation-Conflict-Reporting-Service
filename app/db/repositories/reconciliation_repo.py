@@ -21,14 +21,43 @@ class ReconciliationRepository:
     async def get_by_patient(self, patient_id):
         results = []
 
-        async for doc in self.collection.find({"patient_id": patient_id}):
+        async for doc in self.collection.find({"patient_id": patient_id}).sort("timestamp", -1):
 
-            doc["id"] = str(doc["_id"])
-            doc.pop("_id", None)
+            rec = {
+                "reconciliation_id": str(doc["_id"]),
+                "patient_id": doc.get("patient_id"),
+                "timestamp": doc.get("timestamp"),
 
-            if "timestamp" in doc and isinstance(doc["timestamp"], datetime):
-                doc["timestamp"] = doc["timestamp"].isoformat()
+                "sources": doc.get("sources", []),
 
-            results.append(doc)
+                "unified_medications": doc.get("unified", []),
+
+                "conflicts": []
+            }
+
+            #  Normalize timestamp
+            if isinstance(rec["timestamp"], datetime):
+                rec["timestamp"] = rec["timestamp"].isoformat()
+
+            #  Process conflicts
+            for c in doc.get("conflicts", []):
+                rec["conflicts"].append({
+                    "id": c.get("id"),
+                    "drug": c.get("drug"),
+                    "type": c.get("type"),
+                    "severity": c.get("severity"),
+                    "status": c.get("status"),
+
+                    "values": c.get("values"),
+                    "sources": c.get("sources"),
+                    "reason": c.get("reason"),
+
+                    "resolved_at": c.get("resolved_at"),
+                    "resolution_reason": c.get("resolution_reason"),
+                    "corrected_field": c.get("corrected_field"),
+                    "corrected_value": c.get("corrected_value"),
+                })
+
+            results.append(rec)
 
         return results

@@ -208,3 +208,39 @@ def test_multiple_conflict_types():
     types = {c["type"] for c in conflicts}
 
     assert "BLACKLISTED_COMBINATION" in types
+
+def test_empty_sources():
+    unified, conflicts = reconcile_medications([])
+    assert unified == []
+    assert conflicts == []
+
+
+def test_all_null_fields():
+    sources = make_sources(
+        [(None, None, None, "EMR")]
+    )
+
+    unified, conflicts = reconcile_medications(sources)
+
+    assert len(unified) == 0
+
+
+def test_case_insensitivity():
+    sources = make_sources(
+        [("PARACETAMOL", "500MG", "bid", "EMR")]
+    )
+
+    unified, _ = reconcile_medications(sources)
+
+    assert unified[0]["name"] == "paracetamol"
+
+
+def test_whitespace_handling():
+    sources = make_sources(
+        [("  Paracetamol  ", " 500 mg ", " BID ", "EMR")]
+    )
+
+    unified, _ = reconcile_medications(sources)
+
+    assert unified[0]["dosage"] == "500mg"
+

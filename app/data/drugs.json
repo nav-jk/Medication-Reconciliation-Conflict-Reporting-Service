@@ -1,29 +1,101 @@
 {
   "paracetamol": {
     "generic_name": "paracetamol",
-    "brands": ["crocin", "calpol", "tylenol", "pcm"],
+    "brands": ["crocin", "calpol", "tylenol", "pcm", "panadol"],
     "synonyms": ["acetaminophen"],
     "class": "analgesic",
-    "forms": ["tablet", "syrup"],
-    "common_strengths_mg": [250, 500, 650],
+    "forms": ["tablet", "syrup", "injection"],
+    "common_strengths_mg": [250, 500, 650, 1000],
     "rxnorm_id": "161"
   },
+
   "ibuprofen": {
     "generic_name": "ibuprofen",
-    "brands": ["brufen", "advil"],
+    "brands": ["brufen", "advil", "nurofen"],
     "synonyms": [],
     "class": "nsaid",
-    "forms": ["tablet"],
-    "common_strengths_mg": [200, 400],
+    "forms": ["tablet", "suspension"],
+    "common_strengths_mg": [200, 400, 600],
     "rxnorm_id": "5640"
   },
+
   "diclofenac": {
     "generic_name": "diclofenac",
-    "brands": ["voveran"],
+    "brands": ["voveran", "voltaren"],
     "synonyms": [],
     "class": "nsaid",
-    "forms": ["tablet"],
-    "common_strengths_mg": [50],
+    "forms": ["tablet", "gel", "injection"],
+    "common_strengths_mg": [50, 75],
     "rxnorm_id": "3355"
+  },
+
+  "metformin": {
+    "generic_name": "metformin",
+    "brands": ["glycomet", "glucophage"],
+    "synonyms": [],
+    "class": "antidiabetic",
+    "forms": ["tablet"],
+    "common_strengths_mg": [500, 850, 1000],
+    "rxnorm_id": "6809"
+  },
+
+  "amlodipine": {
+    "generic_name": "amlodipine",
+    "brands": ["amlong", "norvasc"],
+    "synonyms": [],
+    "class": "antihypertensive",
+    "forms": ["tablet"],
+    "common_strengths_mg": [2.5, 5, 10],
+    "rxnorm_id": "17767"
+  },
+
+  "atorvastatin": {
+    "generic_name": "atorvastatin",
+    "brands": ["atorva", "lipitor"],
+    "synonyms": [],
+    "class": "statin",
+    "forms": ["tablet"],
+    "common_strengths_mg": [10, 20, 40, 80],
+    "rxnorm_id": "83367"
+  },
+
+  "aspirin": {
+    "generic_name": "aspirin",
+    "brands": ["ecosprin"],
+    "synonyms": ["acetylsalicylic acid"],
+    "class": "antiplatelet",
+    "forms": ["tablet"],
+    "common_strengths_mg": [75, 150, 325],
+    "rxnorm_id": "1191"
+  },
+
+  "clopidogrel": {
+    "generic_name": "clopidogrel",
+    "brands": ["plavix"],
+    "synonyms": [],
+    "class": "antiplatelet",
+    "forms": ["tablet"],
+    "common_strengths_mg": [75],
+    "rxnorm_id": "32968"
+  },
+
+  "amoxicillin": {
+    "generic_name": "amoxicillin",
+    "brands": ["mox", "amoxil"],
+    "synonyms": [],
+    "class": "antibiotic",
+    "forms": ["capsule", "syrup"],
+    "common_strengths_mg": [250, 500],
+    "rxnorm_id": "723"
+  },
+
+  "pantoprazole": {
+    "generic_name": "pantoprazole",
+    "brands": ["pantocid", "pan"],
+    "synonyms": [],
+    "class": "ppi",
+    "forms": ["tablet", "injection"],
+    "common_strengths_mg": [20, 40],
+    "rxnorm_id": "40790"
   }
 }

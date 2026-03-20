@@ -1,20 +1,51 @@
 {
   "dosage_limits": {
-    "paracetamol": {
-      "min_mg": 250,
-      "max_mg": 1000
-    },
-    "ibuprofen": {
-      "min_mg": 200,
-      "max_mg": 800
-    },
-    "diclofenac": {
-      "min_mg": 25,
-      "max_mg": 100
-    }
+    "paracetamol": { "min_mg": 250, "max_mg": 1000 },
+    "ibuprofen": { "min_mg": 200, "max_mg": 800 },
+    "diclofenac": { "min_mg": 25, "max_mg": 100 },
+    "metformin": { "min_mg": 500, "max_mg": 2000 },
+    "amlodipine": { "min_mg": 2.5, "max_mg": 10 },
+    "atorvastatin": { "min_mg": 10, "max_mg": 80 },
+    "aspirin": { "min_mg": 75, "max_mg": 325 },
+    "clopidogrel": { "min_mg": 75, "max_mg": 75 },
+    "amoxicillin": { "min_mg": 250, "max_mg": 1000 },
+    "pantoprazole": { "min_mg": 20, "max_mg": 40 }
   },
 
   "blacklisted_combinations": [
-    ["ibuprofen", "diclofenac"]
+    ["ibuprofen", "diclofenac"],
+    ["aspirin", "ibuprofen"],
+    ["aspirin", "diclofenac"]
+  ],
+
+  "class_conflicts": [
+    ["nsaid", "nsaid"],
+    ["antiplatelet", "nsaid"]
+  ],
+
+  "duplicate_therapy_classes": [
+    "nsaid",
+    "statin",
+    "antiplatelet"
+  ],
+
+  "high_risk_combinations": [
+    {
+      "drugs": ["aspirin", "clopidogrel"],
+      "severity": "high",
+      "reason": "Increased bleeding risk"
+    },
+    {
+      "drugs": ["ibuprofen", "aspirin"],
+      "severity": "medium",
+      "reason": "Reduces cardioprotective effect of aspirin"
+    }
+  ],
+
+  "frequency_conflicts": [
+    {
+      "pattern": ["OD", "BID"],
+      "type": "frequency_mismatch"
+    }
   ]
 }
